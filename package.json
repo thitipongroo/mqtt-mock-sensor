@@ -1,0 +1,25 @@
+{
+    "name": "mqtt-mock-sensor",
+    "version": "1.0.0",
+    "description": "A CLI tool to mock IoT sensor data and publish to an MQTT broker",
+    "main": "index.js",
+    "bin": {
+        "mock-sensor": "./index.js"
+    },
+    "scripts": {
+        "start": "node index.js"
+    },
+    "keywords": [
+        "iot",
+        "mqtt",
+        "mock",
+        "testing",
+        "sensor"
+    ],
+    "author": "Thitipong Roongprasert",
+    "license": "MIT",
+    "dependencies": {
+        "commander": "^11.0.0",
+        "mqtt": "^5.0.0"
+    }
+}

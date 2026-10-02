@@ -1,13 +1,16 @@
 {
     "name": "mqtt-mock-sensor",
-    "version": "1.1.0",
+    "version": "1.1.1",
     "description": "A CLI tool to mock IoT sensor data and publish to an MQTT broker",
     "main": "index.js",
     "bin": {
         "mock-sensor": "index.js"
     },
     "scripts": {
-        "start": "node index.js"
+        "start": "node index.js",
+        "test": "jest",
+        "lint": "eslint .",
+        "format": "prettier --write ."
     },
     "keywords": [
         "iot",
@@ -21,5 +24,12 @@
     "dependencies": {
         "commander": "^11.0.0",
         "mqtt": "^5.0.0"
+    },
+    "devDependencies": {
+        "eslint": "^10.11.0",
+        "eslint-config-prettier": "^10.1.8",
+        "eslint-plugin-prettier": "^5.5.6",
+        "jest": "^30.5.2",
+        "prettier": "^3.9.9"
     }
 }

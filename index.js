@@ -16,10 +16,15 @@ const options = program.opts();
 console.log(`🔌 Connecting to MQTT broker at ${options.broker}...`);
 const client = mqtt.connect(options.broker);
 
+// ประกาศตัวแปรเก็บ Interval ไว้ข้างนอก เพื่อให้ตอน Shutdown สั่งหยุดได้
+let intervalId;
+
 client.on('connect', () => {
     console.log(`✅ Connected! Publishing data to topic: ${options.topic} every ${options.interval}ms`);
+    console.log(`(Press Ctrl+C to stop)`);
 
-    setInterval(() => {
+    // เก็บค่า ID ของ loop ไว้ในตัวแปร
+    intervalId = setInterval(() => {
         // Generate mock data
         const payload = {
             deviceId: `mock-device-${Math.floor(Math.random() * 1000)}`,
@@ -37,4 +42,23 @@ client.on('connect', () => {
 client.on('error', (err) => {
     console.error('❌ Connection error:', err);
     process.exit(1);
+});
+
+// ---------------------------------------------------------
+// เพิ่มส่วน Graceful Shutdown ตรงนี้ (ล่างสุดของไฟล์)
+// ---------------------------------------------------------
+process.on('SIGINT', () => {
+    console.log('\n🛑 Gracefully shutting down...');
+
+    // 1. หยุดการส่งข้อมูลรอบใหม่ (Clear Interval)
+    if (intervalId) {
+        clearInterval(intervalId);
+    }
+
+    // 2. ตัดการเชื่อมต่อ MQTT อย่างปลอดภัย
+    client.end(false, () => {
+        console.log('🔌 Disconnected from MQTT broker. Goodbye!');
+        // 3. ปิดโปรแกรม
+        process.exit(0);
+    });
 });

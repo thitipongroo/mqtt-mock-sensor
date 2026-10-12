@@ -70,8 +70,6 @@ const deviceList = Array.from({ length: options.devices }, (_, index) => {
         : `mock-device-${String(index + 1).padStart(3, '0')}`;
 });
 
-let intervalId;
-
 let customTemplate = null;
 if (options.template) {
     try {
@@ -86,9 +84,12 @@ client.on('reconnect', () => {
     console.log('🔄 Reconnecting to MQTT broker...');
 });
 
+let intervalId;
+
 client.on('connect', () => {
     console.log(`✅ Connected! Simulating ${deviceList.length} device(s)...`);
     console.log(`(Press Ctrl+C to stop)`);
+    let publishedCount = 0;
     intervalId = setInterval(() => {
         deviceList.forEach((devId) => {
             const targetTopic = options.topic.replace(/\{deviceId\}/g, devId);
@@ -102,6 +103,15 @@ client.on('connect', () => {
             });
             console.log(`📤 ${devId} -> ${message}`);
         });
+        publishedCount++;
+        if (options.count && publishedCount >= options.count) {
+            console.log(`\n✅ Published ${publishedCount} message(s) per device. Stopping...`);
+            clearInterval(intervalId);
+            client.end(false, () => {
+                console.log('🔌 Disconnected. Goodbye!');
+                process.exit(0);
+            });
+        }
     }, options.interval);
 });
 

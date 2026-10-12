@@ -9,19 +9,32 @@ const { generatePayload } = require('./payloadGenerator');
 program
     .version(version)
     .description(description)
-    .option('-b, --broker <url>', 'MQTT broker URL', 'wss://broker.emqx.io:8084/mqtt')
+    .option('-b, --broker <url>', 'MQTT broker URL', 'mqtts://broker.hivemq.com:8883')
     .option('-t, --topic <topic>', 'MQTT topic to publish to', 'sensor/mock/data')
     .option('-i, --interval <ms>', 'Interval between messages in ms', 2000)
     .option('-u, --username <user>', 'MQTT broker username (optional)')
     .option('-p, --password <pass>', 'MQTT broker password (optional)')
     .option('--type <type>', 'Sensor type: env (default), gps, power', 'env')
     .option('-d, --device-id <id>', 'Specific device ID (default: auto-generated session ID)')
+    .option('--devices <count>', 'Number of simulated devices', (val) => parseInt(val, 10), 1)
+    .option('-q, --qos <0|1|2>', 'MQTT QoS level (0, 1, or 2)', (val) => parseInt(val, 10), 0)
+    .option('-r, --retain', 'Set MQTT retain flag (Default: `false`', false)
     .parse(process.argv);
 
 const options = program.opts();
 
-// 2. Setup connection options including Authentication if provided
-const activeDeviceId = options.deviceId || `mock-device-${Math.floor(Math.random() * 1000)}`;
+// Check QoS
+if (![0, 1, 2].includes(options.qos)) {
+    console.error('❌ Error: QoS must be 0, 1, or 2');
+    process.exit(1);
+}
+
+// options -> client.publish()
+const publishOptions = {
+    qos: options.qos,
+    retain: options.retain
+};
+
 const connectOptions = {
     clientId: `mock_sensor_${Math.random().toString(16).substring(2, 10)}`,
     clean: true,
@@ -35,6 +48,12 @@ console.log(`🔌 Connecting to MQTT broker at ${options.broker}...`);
 // Pass the connectOptions to the MQTT client
 const client = mqtt.connect(options.broker, connectOptions);
 
+const deviceList = Array.from({ length: options.devices }, (_, index) => {
+    return options.deviceId && options.devices === 1
+        ? options.deviceId
+        : `mock-device-${String(index + 1).padStart(3, '0')}`;
+});
+
 let intervalId;
 
 client.on('reconnect', () => {
@@ -42,15 +61,17 @@ client.on('reconnect', () => {
 });
 
 client.on('connect', () => {
-    console.log(
-        `✅ Connected! Publishing [${options.type.toUpperCase()}] data to topic: ${options.topic} every ${options.interval}ms`
-    );
+    console.log(`✅ Connected! Simulating ${deviceList.length} device(s)...`);
     console.log(`(Press Ctrl+C to stop)`);
-
     intervalId = setInterval(() => {
-        const message = generatePayload(options.type, { deviceId: activeDeviceId });
-        client.publish(options.topic, message);
-        console.log(`📤 Published: ${message}`);
+        deviceList.forEach((devId) => {
+            const message = generatePayload(options.type, { deviceId: devId });
+            // const targetTopic = options.devices > 1 ? `${options.topic}/${devId}` : options.topic;
+            client.publish(options.topic, message, publishOptions, (err) => {
+                if (err) console.error(`❌ Publish error: ${err.message}`);
+            });
+            console.log(`📤 ${devId} -> ${message}`);
+        });
     }, options.interval);
 });
 

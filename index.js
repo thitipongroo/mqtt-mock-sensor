@@ -21,17 +21,26 @@ program
     .option('-q, --qos <0|1|2>', 'MQTT QoS level (0, 1, or 2)', (val) => parseInt(val, 10), 0)
     .option('-r, --retain', 'Set MQTT retain flag (Default: `false`', false)
     .option('--template <path>', 'Path to custom JSON template file')
+    .option('--ca <file>', 'Path to CA certificate')
+    .option('--cert <file>', 'Path to client certificate (mTLS)')
+    .option('--key <file>', 'Path to client private key (mTLS)')
+    .option('--insecure', 'Allow self-signed certificates', false)
+    .option('--count <n>', 'Exit after publishing N messages per device', (v) => parseInt(v, 10))
+    .option(
+        '--anomaly-rate <percent>',
+        'Anomaly injection rate in % (e.g. 5)',
+        (v) => parseFloat(v),
+        0
+    )
     .parse(process.argv);
 
 const options = program.opts();
 
-// Check QoS
 if (![0, 1, 2].includes(options.qos)) {
     console.error('❌ Error: QoS must be 0, 1, or 2');
     process.exit(1);
 }
 
-// options -> client.publish()
 const publishOptions = {
     qos: options.qos,
     retain: options.retain
@@ -43,11 +52,16 @@ const connectOptions = {
     connectTimeout: 5000,
     reconnectPeriod: 3000
 };
+
 if (options.username) connectOptions.username = options.username;
 if (options.password) connectOptions.password = options.password;
+if (options.ca) connectOptions.ca = fs.readFileSync(options.ca);
+if (options.cert) connectOptions.cert = fs.readFileSync(options.cert);
+if (options.key) connectOptions.key = fs.readFileSync(options.key);
+if (options.insecure) connectOptions.rejectUnauthorized = false;
 
 console.log(`🔌 Connecting to MQTT broker at ${options.broker}...`);
-// Pass the connectOptions to the MQTT client
+
 const client = mqtt.connect(options.broker, connectOptions);
 
 const deviceList = Array.from({ length: options.devices }, (_, index) => {
@@ -77,11 +91,13 @@ client.on('connect', () => {
     console.log(`(Press Ctrl+C to stop)`);
     intervalId = setInterval(() => {
         deviceList.forEach((devId) => {
+            const targetTopic = options.topic.replace(/\{deviceId\}/g, devId);
             const message = generatePayload(options.type, {
                 deviceId: devId,
-                template: customTemplate
+                template: customTemplate,
+                anomalyRate: options.anomalyRate
             });
-            client.publish(options.topic, message, publishOptions, (err) => {
+            client.publish(targetTopic, message, publishOptions, (err) => {
                 if (err) console.error(`❌ Publish error: ${err.message}`);
             });
             console.log(`📤 ${devId} -> ${message}`);
@@ -93,14 +109,11 @@ client.on('error', (err) => {
     console.error('⚠️ Connection error:', err.message);
 });
 
-// Graceful Shutdown
 process.on('SIGINT', () => {
     console.log('\n🛑 Gracefully shutting down...');
-
     if (intervalId) {
         clearInterval(intervalId);
     }
-
     client.end(false, () => {
         console.log('🔌 Disconnected from MQTT broker. Goodbye!');
         process.exit(0);

@@ -1,14 +1,33 @@
+const gpsState = {
+    latitude: 13.7563,
+    longitude: 100.5018,
+    speed: 40.0
+};
+
 function generatePayload(type = 'env', options = {}) {
     let payload = {
         deviceId: options.deviceId || `mock-device-${Math.floor(Math.random() * 1000)}`,
         timestamp: new Date().toISOString()
     };
 
-    switch (type.toLowerCase()) {
+    if (options.template) {
+        let compiled = options.template
+            .replace(/\{\{timestamp\}\}/g, new Date().toISOString())
+            .replace(/\{\{deviceId\}\}/g, options.deviceId || 'mock-device-001')
+            .replace(/\{\{randomInt\}\}/g, Math.floor(Math.random() * 100))
+            .replace(/\{\{randomFloat\}\}/g, (Math.random() * 100).toFixed(2));
+        return compiled;
+    }
+
+    switch (String(type).toLowerCase()) {
         case 'gps':
-            payload.latitude = parseFloat((Math.random() * 180 - 90).toFixed(6));
-            payload.longitude = parseFloat((Math.random() * 360 - 180).toFixed(6));
-            payload.speed = parseFloat((Math.random() * 100).toFixed(2));
+            // Estimate 50-100 / tick
+            gpsState.latitude += (Math.random() - 0.5) * 0.001;
+            gpsState.longitude += (Math.random() - 0.5) * 0.001;
+            gpsState.speed = Math.max(0, Math.min(120, gpsState.speed + (Math.random() - 0.5) * 5));
+            payload.latitude = parseFloat(gpsState.latitude.toFixed(6));
+            payload.longitude = parseFloat(gpsState.longitude.toFixed(6));
+            payload.speed = parseFloat(gpsState.speed.toFixed(2));
             break;
         case 'power':
             payload.voltage = parseFloat((Math.random() * 20 + 210).toFixed(2));

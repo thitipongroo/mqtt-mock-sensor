@@ -33,6 +33,11 @@ mock-sensor --broker <broker-url> --topic <topic-name> --type <sensor-type>
 - `-u, --username` : MQTT Broker username for authentication (Optional)
 - `-p, --password` : MQTT Broker password for authentication (Optional)
 - `--type` : Type of sensor data to mock (`env`, `gps`, `power`) (Default: `env`)
+- `-d, --device-id` : Static Device ID for session (Default: auto-generated)
+- `-q, --qos` : MQTT QoS Level 0, 1, or 2 (Default: `0`)
+- `-r, --retain` : Enable MQTT Retain flag
+- `--devices` : Number of simulated devices to run concurrently (Default: `1`)
+- `--template` : Path to a custom JSON template file (`{{timestamp}}`, `{{deviceId}}`, `{{randomFloat}}`)
 
 ### Examples
 

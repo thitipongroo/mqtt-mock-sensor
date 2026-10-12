@@ -31,4 +31,19 @@ describe('Payload Generator', () => {
         expect(data).toHaveProperty('current');
         expect(data).toHaveProperty('power');
     });
+
+    test('should generate ENV metrics as numbers', () => {
+        const data = JSON.parse(generatePayload('env'));
+        expect(typeof data.temperature).toBe('number');
+        expect(typeof data.humidity).toBe('number');
+    });
+
+    test('should accept custom deviceId option', () => {
+        const data = JSON.parse(generatePayload('env', { deviceId: 'custom-sensor-99' }));
+        expect(data.deviceId).toBe('custom-sensor-99');
+    });
+
+    test('should not throw if type is undefined', () => {
+        expect(() => generatePayload()).not.toThrow();
+    });
 });

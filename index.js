@@ -4,6 +4,7 @@ const { program } = require('commander');
 const mqtt = require('mqtt');
 const { version, description } = require('./package.json');
 const { generatePayload } = require('./payloadGenerator');
+const fs = require('fs');
 
 // 1. Add new command-line options for Auth and Sensor Type
 program
@@ -19,6 +20,7 @@ program
     .option('--devices <count>', 'Number of simulated devices', (val) => parseInt(val, 10), 1)
     .option('-q, --qos <0|1|2>', 'MQTT QoS level (0, 1, or 2)', (val) => parseInt(val, 10), 0)
     .option('-r, --retain', 'Set MQTT retain flag (Default: `false`', false)
+    .option('--template <path>', 'Path to custom JSON template file')
     .parse(process.argv);
 
 const options = program.opts();
@@ -56,6 +58,16 @@ const deviceList = Array.from({ length: options.devices }, (_, index) => {
 
 let intervalId;
 
+let customTemplate = null;
+if (options.template) {
+    try {
+        customTemplate = fs.readFileSync(options.template, 'utf-8');
+    } catch (err) {
+        console.error(`❌ Failed to read template file: ${err.message}`);
+        process.exit(1);
+    }
+}
+
 client.on('reconnect', () => {
     console.log('🔄 Reconnecting to MQTT broker...');
 });
@@ -65,8 +77,10 @@ client.on('connect', () => {
     console.log(`(Press Ctrl+C to stop)`);
     intervalId = setInterval(() => {
         deviceList.forEach((devId) => {
-            const message = generatePayload(options.type, { deviceId: devId });
-            // const targetTopic = options.devices > 1 ? `${options.topic}/${devId}` : options.topic;
+            const message = generatePayload(options.type, {
+                deviceId: devId,
+                template: customTemplate
+            });
             client.publish(options.topic, message, publishOptions, (err) => {
                 if (err) console.error(`❌ Publish error: ${err.message}`);
             });

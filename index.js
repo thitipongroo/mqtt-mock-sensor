@@ -7,6 +7,7 @@ const { generatePayload } = require('./payloadGenerator');
 const fs = require('fs');
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const VALID_ANOMALY_TYPES = ['critical', 'warning', 'quality', 'out-of-bounds'];
 
 program
     .version(version)
@@ -28,42 +29,72 @@ program
     .option('--insecure', 'Allow self-signed certificates', false)
     .option('--count <n>', 'Exit after publishing N messages per device', (v) => parseInt(v, 10))
     .option(
+        '--schema-version <ver>',
+        'Telemetry schema version: 1 (legacy flat) or 2 (Sentinel readings)',
+        (v) => parseInt(v, 10)
+    )
+    .option('--org-id <uuid>', 'Organization/Tenant UUID for multi-tenancy')
+    .option('--epoch-timestamp', 'Force numeric Unix epoch milliseconds timestamp', false)
+    .option(
+        '--preset <name>',
+        'Sentinel domain preset: sentinel-env, sentinel-industrial, sentinel-air'
+    )
+    .option(
         '--anomaly-rate <percent>',
-        'Anomaly injection rate in % (e.g. 5)',
+        'Anomaly injection rate in % (e.g. 10)',
         (v) => parseFloat(v),
         0
     )
     .option(
-        '--schema-version <ver>',
-        'Telemetry schema version: 1 (legacy flat) or 2 (Sentinel readings)',
-        (v) => parseInt(v, 10),
-        1
+        '--anomaly-type <type>',
+        'Type of anomaly: critical, warning, quality, out-of-bounds',
+        'critical'
     )
-    .option('--org-id <uuid>', 'Organization/Tenant UUID for multi-tenancy')
-    .option('--epoch-timestamp', 'Force numeric Unix epoch milliseconds timestamp', false)
+    .option(
+        '--independent-clients',
+        'Spawn separate MQTT TCP/TLS socket connections per device (true concurrency)',
+        false
+    )
     .parse(process.argv);
 
 const options = program.opts();
 
-// Check QoS
+// ตรวจสอบค่า QoS
 if (![0, 1, 2].includes(options.qos)) {
     console.error('❌ Error: QoS must be 0, 1, or 2');
     process.exit(1);
 }
 
-// Check Schema Version
-if (![1, 2].includes(options.schemaVersion)) {
+// ตรวจสอบค่า Anomaly Type
+if (options.anomalyType && !VALID_ANOMALY_TYPES.includes(options.anomalyType.toLowerCase())) {
+    console.error(
+        `❌ Error: Invalid --anomaly-type "${options.anomalyType}". Valid options: ${VALID_ANOMALY_TYPES.join(', ')}`
+    );
+    process.exit(1);
+}
+
+// กำหนดค่า Schema Version อัตโนมัติ: หากเลือก Preset Sentinel ให้เป็น v2 อัตโนมัติ
+let effectiveSchemaVersion = options.schemaVersion;
+if (!effectiveSchemaVersion) {
+    if (options.preset && options.preset.toLowerCase().startsWith('sentinel-')) {
+        effectiveSchemaVersion = 2;
+    } else {
+        effectiveSchemaVersion = 1;
+    }
+}
+
+if (![1, 2].includes(effectiveSchemaVersion)) {
     console.error('❌ Error: --schema-version must be 1 or 2');
     process.exit(1);
 }
 
-// Check Organization UUID (Option)
+// ตรวจสอบความถูกต้องของ Organization UUID
 if (options.orgId && !UUID_REGEX.test(options.orgId)) {
     console.error(`❌ Error: Invalid --org-id format "${options.orgId}". Must be a valid UUID.`);
     process.exit(1);
 }
 
-// Default Topic Multi-tenancy format
+// กำหนด Default Topic Template
 let targetTopicTemplate = options.topic;
 if (!targetTopicTemplate) {
     if (options.orgId) {
@@ -78,33 +109,12 @@ const publishOptions = {
     retain: options.retain
 };
 
-const connectOptions = {
-    clientId: `mock_sensor_${Math.random().toString(16).substring(2, 10)}`,
-    clean: true,
-    connectTimeout: 5000,
-    reconnectPeriod: 3000
-};
-
-if (options.username) connectOptions.username = options.username;
-if (options.password) connectOptions.password = options.password;
-if (options.ca) connectOptions.ca = fs.readFileSync(options.ca);
-if (options.cert) connectOptions.cert = fs.readFileSync(options.cert);
-if (options.key) connectOptions.key = fs.readFileSync(options.key);
-if (options.insecure) connectOptions.rejectUnauthorized = false;
-
-console.log(`🔌 Connecting to MQTT broker at ${options.broker}...`);
-
-const client = mqtt.connect(options.broker, connectOptions);
-
-const deviceList = Array.from({ length: options.devices }, (_, index) => {
-    return options.deviceId && options.devices === 1
-        ? options.deviceId
-        : `mock-device-${String(index + 1).padStart(3, '0')}`;
-});
-
-let intervalId;
-let publishedCounts = new Map();
-deviceList.forEach((d) => publishedCounts.set(d, 0));
+// อ่านไฟล์ Certificate (ถ้ามี)
+const tlsOptions = {};
+if (options.ca) tlsOptions.ca = fs.readFileSync(options.ca);
+if (options.cert) tlsOptions.cert = fs.readFileSync(options.cert);
+if (options.key) tlsOptions.key = fs.readFileSync(options.key);
+if (options.insecure) tlsOptions.rejectUnauthorized = false;
 
 let customTemplate = null;
 if (options.template) {
@@ -116,72 +126,163 @@ if (options.template) {
     }
 }
 
-client.on('reconnect', () => {
-    console.log('🔄 Reconnecting to MQTT broker...');
+const deviceList = Array.from({ length: options.devices }, (_, index) => {
+    return options.deviceId && options.devices === 1
+        ? options.deviceId
+        : `mock-device-${String(index + 1).padStart(3, '0')}`;
 });
 
-client.on('connect', () => {
-    console.log(
-        `✅ Connected! Simulating ${deviceList.length} device(s) [Schema v${options.schemaVersion}]...`
-    );
-    console.log(`📡 Topic Template: ${targetTopicTemplate}`);
-    console.log(`(Press Ctrl+C to stop)`);
+const selectedPreset = options.preset || options.type;
 
-    intervalId = setInterval(() => {
-        let allCompleted = true;
+console.log(`🔌 Initializing MQTT simulation for ${deviceList.length} device(s)...`);
+console.log(
+    `📋 Configuration: Schema v${effectiveSchemaVersion} | Preset: "${selectedPreset}" | Anomaly: ${options.anomalyRate}% (${options.anomalyType})`
+);
+console.log(`📡 Topic Template: ${targetTopicTemplate}`);
+if (options.independentClients) {
+    console.log(`⚡ Mode: Independent Client Sockets (1 TCP socket per device)`);
+}
 
-        deviceList.forEach((devId) => {
-            const currentCount = publishedCounts.get(devId);
-            if (options.count && currentCount >= options.count) {
-                return;
+// ──────────────────────────────────────────────────────────
+// Helper: Function สร้าง Message ประจำ Device
+// ──────────────────────────────────────────────────────────
+function createDeviceMessage(devId) {
+    return generatePayload(options.type, {
+        deviceId: devId,
+        template: customTemplate,
+        preset: options.preset,
+        anomalyRate: options.anomalyRate,
+        anomalyType: options.anomalyType,
+        schemaVersion: effectiveSchemaVersion,
+        orgId: options.orgId,
+        epochTimestamp: options.epochTimestamp
+    });
+}
+
+// ──────────────────────────────────────────────────────────
+// Concurrency Engine: Single Connection vs Multi-Socket Pool
+// ──────────────────────────────────────────────────────────
+let activeClients = [];
+let activeIntervals = [];
+let publishedCounts = new Map();
+deviceList.forEach((d) => publishedCounts.set(d, 0));
+
+function checkExitCondition() {
+    if (!options.count) return;
+    const allDone = deviceList.every((d) => publishedCounts.get(d) >= options.count);
+    if (allDone) {
+        console.log(`\n✅ Published ${options.count} message(s) per device successfully. Exiting.`);
+        shutdownAndExit(0);
+    }
+}
+
+function shutdownAndExit(code = 0) {
+    activeIntervals.forEach((id) => clearInterval(id));
+    let remaining = activeClients.length;
+    if (remaining === 0) process.exit(code);
+
+    activeClients.forEach((c) => {
+        c.end(false, () => {
+            remaining -= 1;
+            if (remaining <= 0) {
+                console.log('🔌 Disconnected all MQTT clients. Goodbye!');
+                process.exit(code);
             }
-            allCompleted = false;
+        });
+    });
+}
 
-            const targetTopic = targetTopicTemplate
-                .replace(/\{deviceId\}/g, devId)
-                .replace(/\{orgId\}/g, options.orgId || '');
+if (options.independentClients) {
+    // ── Mode A: True Independent Sockets (1 Client ต่อ 1 Device) ───────────
+    deviceList.forEach((devId) => {
+        const connOpts = {
+            clientId: `mock_sensor_${devId}_${Math.random().toString(16).substring(2, 6)}`,
+            clean: true,
+            connectTimeout: 5000,
+            reconnectPeriod: 3000,
+            ...tlsOptions
+        };
+        if (options.username) connOpts.username = options.username;
+        if (options.password) connOpts.password = options.password;
 
-            const message = generatePayload(options.type, {
-                deviceId: devId,
-                template: customTemplate,
-                anomalyRate: options.anomalyRate,
-                schemaVersion: options.schemaVersion,
-                orgId: options.orgId,
-                epochTimestamp: options.epochTimestamp
-            });
+        const client = mqtt.connect(options.broker, connOpts);
+        activeClients.push(client);
 
-            client.publish(targetTopic, message, publishOptions, (err) => {
-                if (err) console.error(`❌ Publish error: ${err.message}`);
-            });
-            console.log(`📤 ${devId} -> ${message}`);
+        client.on('connect', () => {
+            console.log(`✅ [${devId}] Connected via independent socket.`);
+            const intervalId = setInterval(() => {
+                const count = publishedCounts.get(devId);
+                if (options.count && count >= options.count) {
+                    clearInterval(intervalId);
+                    checkExitCondition();
+                    return;
+                }
 
-            publishedCounts.set(devId, currentCount + 1);
+                const targetTopic = targetTopicTemplate
+                    .replace(/\{deviceId\}/g, devId)
+                    .replace(/\{orgId\}/g, options.orgId || '');
+                const message = createDeviceMessage(devId);
+
+                client.publish(targetTopic, message, publishOptions, (err) => {
+                    if (err) console.error(`❌ [${devId}] Publish error: ${err.message}`);
+                });
+                console.log(`📤 [${devId}] -> ${message}`);
+
+                publishedCounts.set(devId, count + 1);
+                checkExitCondition();
+            }, options.interval);
+            activeIntervals.push(intervalId);
         });
 
-        // check (--count)
-        if (options.count && allCompleted) {
-            console.log(
-                `\n✅ Published ${options.count} message(s) per device successfully. Exiting.`
-            );
-            clearInterval(intervalId);
-            client.end(false, () => {
-                process.exit(0);
-            });
-        }
-    }, options.interval);
-});
+        client.on('error', (err) => {
+            console.error(`⚠️ [${devId}] Connection error:`, err.message);
+        });
+    });
+} else {
+    // ── Mode B: Multiplexed Single Client (ค่าเริ่มต้นเดิม) ─────────────────
+    const connOpts = {
+        clientId: `mock_sensor_pool_${Math.random().toString(16).substring(2, 10)}`,
+        clean: true,
+        connectTimeout: 5000,
+        reconnectPeriod: 3000,
+        ...tlsOptions
+    };
+    if (options.username) connOpts.username = options.username;
+    if (options.password) connOpts.password = options.password;
 
-client.on('error', (err) => {
-    console.error('⚠️ Connection error:', err.message);
-});
+    const client = mqtt.connect(options.broker, connOpts);
+    activeClients.push(client);
+
+    client.on('connect', () => {
+        console.log(`✅ Connected to broker! Simulating ${deviceList.length} device(s)...`);
+        const intervalId = setInterval(() => {
+            deviceList.forEach((devId) => {
+                const count = publishedCounts.get(devId);
+                if (options.count && count >= options.count) return;
+
+                const targetTopic = targetTopicTemplate
+                    .replace(/\{deviceId\}/g, devId)
+                    .replace(/\{orgId\}/g, options.orgId || '');
+                const message = createDeviceMessage(devId);
+
+                client.publish(targetTopic, message, publishOptions, (err) => {
+                    if (err) console.error(`❌ Publish error: ${err.message}`);
+                });
+                console.log(`📤 ${devId} -> ${message}`);
+
+                publishedCounts.set(devId, count + 1);
+            });
+            checkExitCondition();
+        }, options.interval);
+        activeIntervals.push(intervalId);
+    });
+
+    client.on('error', (err) => {
+        console.error('⚠️ Connection error:', err.message);
+    });
+}
 
 process.on('SIGINT', () => {
     console.log('\n🛑 Gracefully shutting down...');
-    if (intervalId) {
-        clearInterval(intervalId);
-    }
-    client.end(false, () => {
-        console.log('🔌 Disconnected from MQTT broker. Goodbye!');
-        process.exit(0);
-    });
+    shutdownAndExit(0);
 });

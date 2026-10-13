@@ -6,12 +6,13 @@ const { version, description } = require('./package.json');
 const { generatePayload } = require('./payloadGenerator');
 const fs = require('fs');
 
-// 1. Add new command-line options for Auth and Sensor Type
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 program
     .version(version)
     .description(description)
     .option('-b, --broker <url>', 'MQTT broker URL', 'mqtts://broker.hivemq.com:8883')
-    .option('-t, --topic <topic>', 'MQTT topic to publish to', 'sensor/mock/data')
+    .option('-t, --topic <topic>', 'MQTT topic to publish to (supports {deviceId} and {orgId})')
     .option('-i, --interval <ms>', 'Interval between messages in ms', 2000)
     .option('-u, --username <user>', 'MQTT broker username (optional)')
     .option('-p, --password <pass>', 'MQTT broker password (optional)')
@@ -19,7 +20,7 @@ program
     .option('-d, --device-id <id>', 'Specific device ID (default: auto-generated session ID)')
     .option('--devices <count>', 'Number of simulated devices', (val) => parseInt(val, 10), 1)
     .option('-q, --qos <0|1|2>', 'MQTT QoS level (0, 1, or 2)', (val) => parseInt(val, 10), 0)
-    .option('-r, --retain', 'Set MQTT retain flag (Default: `false`', false)
+    .option('-r, --retain', 'Set MQTT retain flag (Default: false)', false)
     .option('--template <path>', 'Path to custom JSON template file')
     .option('--ca <file>', 'Path to CA certificate')
     .option('--cert <file>', 'Path to client certificate (mTLS)')
@@ -32,13 +33,44 @@ program
         (v) => parseFloat(v),
         0
     )
+    .option(
+        '--schema-version <ver>',
+        'Telemetry schema version: 1 (legacy flat) or 2 (Sentinel readings)',
+        (v) => parseInt(v, 10),
+        1
+    )
+    .option('--org-id <uuid>', 'Organization/Tenant UUID for multi-tenancy')
+    .option('--epoch-timestamp', 'Force numeric Unix epoch milliseconds timestamp', false)
     .parse(process.argv);
 
 const options = program.opts();
 
+// Check QoS
 if (![0, 1, 2].includes(options.qos)) {
     console.error('❌ Error: QoS must be 0, 1, or 2');
     process.exit(1);
+}
+
+// Check Schema Version
+if (![1, 2].includes(options.schemaVersion)) {
+    console.error('❌ Error: --schema-version must be 1 or 2');
+    process.exit(1);
+}
+
+// Check Organization UUID (Option)
+if (options.orgId && !UUID_REGEX.test(options.orgId)) {
+    console.error(`❌ Error: Invalid --org-id format "${options.orgId}". Must be a valid UUID.`);
+    process.exit(1);
+}
+
+// Default Topic Multi-tenancy format
+let targetTopicTemplate = options.topic;
+if (!targetTopicTemplate) {
+    if (options.orgId) {
+        targetTopicTemplate = `tenants/${options.orgId}/devices/{deviceId}/telemetry`;
+    } else {
+        targetTopicTemplate = 'sensor/mock/data';
+    }
 }
 
 const publishOptions = {
@@ -70,6 +102,10 @@ const deviceList = Array.from({ length: options.devices }, (_, index) => {
         : `mock-device-${String(index + 1).padStart(3, '0')}`;
 });
 
+let intervalId;
+let publishedCounts = new Map();
+deviceList.forEach((d) => publishedCounts.set(d, 0));
+
 let customTemplate = null;
 if (options.template) {
     try {
@@ -84,31 +120,51 @@ client.on('reconnect', () => {
     console.log('🔄 Reconnecting to MQTT broker...');
 });
 
-let intervalId;
-
 client.on('connect', () => {
-    console.log(`✅ Connected! Simulating ${deviceList.length} device(s)...`);
+    console.log(
+        `✅ Connected! Simulating ${deviceList.length} device(s) [Schema v${options.schemaVersion}]...`
+    );
+    console.log(`📡 Topic Template: ${targetTopicTemplate}`);
     console.log(`(Press Ctrl+C to stop)`);
-    let publishedCount = 0;
+
     intervalId = setInterval(() => {
+        let allCompleted = true;
+
         deviceList.forEach((devId) => {
-            const targetTopic = options.topic.replace(/\{deviceId\}/g, devId);
+            const currentCount = publishedCounts.get(devId);
+            if (options.count && currentCount >= options.count) {
+                return;
+            }
+            allCompleted = false;
+
+            const targetTopic = targetTopicTemplate
+                .replace(/\{deviceId\}/g, devId)
+                .replace(/\{orgId\}/g, options.orgId || '');
+
             const message = generatePayload(options.type, {
                 deviceId: devId,
                 template: customTemplate,
-                anomalyRate: options.anomalyRate
+                anomalyRate: options.anomalyRate,
+                schemaVersion: options.schemaVersion,
+                orgId: options.orgId,
+                epochTimestamp: options.epochTimestamp
             });
+
             client.publish(targetTopic, message, publishOptions, (err) => {
                 if (err) console.error(`❌ Publish error: ${err.message}`);
             });
             console.log(`📤 ${devId} -> ${message}`);
+
+            publishedCounts.set(devId, currentCount + 1);
         });
-        publishedCount++;
-        if (options.count && publishedCount >= options.count) {
-            console.log(`\n✅ Published ${publishedCount} message(s) per device. Stopping...`);
+
+        // check (--count)
+        if (options.count && allCompleted) {
+            console.log(
+                `\n✅ Published ${options.count} message(s) per device successfully. Exiting.`
+            );
             clearInterval(intervalId);
             client.end(false, () => {
-                console.log('🔌 Disconnected. Goodbye!');
                 process.exit(0);
             });
         }

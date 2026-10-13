@@ -4,6 +4,8 @@ const { program } = require('commander');
 const mqtt = require('mqtt');
 const { version, description } = require('./package.json');
 const { generatePayload } = require('./payloadGenerator');
+const { ShadowManager } = require('./shadowManager');
+const { enrollDevice } = require('./enrollmentHelper');
 const fs = require('fs');
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -14,7 +16,7 @@ program
     .description(description)
     .option('-b, --broker <url>', 'MQTT broker URL', 'mqtts://broker.hivemq.com:8883')
     .option('-t, --topic <topic>', 'MQTT topic to publish to (supports {deviceId} and {orgId})')
-    .option('-i, --interval <ms>', 'Interval between messages in ms', 2000)
+    .option('-i, --interval <ms>', 'Interval between messages in ms', (v) => parseInt(v, 10), 2000)
     .option('-u, --username <user>', 'MQTT broker username (optional)')
     .option('-p, --password <pass>', 'MQTT broker password (optional)')
     .option('--type <type>', 'Sensor type: env (default), gps, power', 'env')
@@ -28,11 +30,7 @@ program
     .option('--key <file>', 'Path to client private key (mTLS)')
     .option('--insecure', 'Allow self-signed certificates', false)
     .option('--count <n>', 'Exit after publishing N messages per device', (v) => parseInt(v, 10))
-    .option(
-        '--schema-version <ver>',
-        'Telemetry schema version: 1 (legacy flat) or 2 (Sentinel readings)',
-        (v) => parseInt(v, 10)
-    )
+    .option('--schema-version <ver>', 'Telemetry schema version: 1 or 2', (v) => parseInt(v, 10))
     .option('--org-id <uuid>', 'Organization/Tenant UUID for multi-tenancy')
     .option('--epoch-timestamp', 'Force numeric Unix epoch milliseconds timestamp', false)
     .option(
@@ -52,148 +50,147 @@ program
     )
     .option(
         '--independent-clients',
-        'Spawn separate MQTT TCP/TLS socket connections per device (true concurrency)',
+        'Spawn separate MQTT TCP/TLS socket connections per device',
         false
+    )
+    .option('--shadow', 'Enable Bi-directional Device Shadow synchronization', false)
+    .option(
+        '--enroll-url <url>',
+        'Sentinel REST enrollment URL (e.g. http://localhost:8080/api/v1/devices/enroll)'
+    )
+    .option('--enroll-token <token>', 'Single-use device enrollment bootstrap token')
+    .option(
+        '--chaos-jitter <ms>',
+        'Inject random network latency up to N ms before publish',
+        (v) => parseInt(v, 10),
+        0
+    )
+    .option(
+        '--chaos-disconnect <percent>',
+        'Random ungraceful disconnect probability %',
+        (v) => parseFloat(v),
+        0
     )
     .parse(process.argv);
 
 const options = program.opts();
 
-// ตรวจสอบค่า QoS
-if (![0, 1, 2].includes(options.qos)) {
-    console.error('❌ Error: QoS must be 0, 1, or 2');
-    process.exit(1);
-}
-
-// ตรวจสอบค่า Anomaly Type
-if (options.anomalyType && !VALID_ANOMALY_TYPES.includes(options.anomalyType.toLowerCase())) {
-    console.error(
-        `❌ Error: Invalid --anomaly-type "${options.anomalyType}". Valid options: ${VALID_ANOMALY_TYPES.join(', ')}`
-    );
-    process.exit(1);
-}
-
-// กำหนดค่า Schema Version อัตโนมัติ: หากเลือก Preset Sentinel ให้เป็น v2 อัตโนมัติ
-let effectiveSchemaVersion = options.schemaVersion;
-if (!effectiveSchemaVersion) {
-    if (options.preset && options.preset.toLowerCase().startsWith('sentinel-')) {
-        effectiveSchemaVersion = 2;
-    } else {
-        effectiveSchemaVersion = 1;
-    }
-}
-
-if (![1, 2].includes(effectiveSchemaVersion)) {
-    console.error('❌ Error: --schema-version must be 1 or 2');
-    process.exit(1);
-}
-
-// ตรวจสอบความถูกต้องของ Organization UUID
-if (options.orgId && !UUID_REGEX.test(options.orgId)) {
-    console.error(`❌ Error: Invalid --org-id format "${options.orgId}". Must be a valid UUID.`);
-    process.exit(1);
-}
-
-// กำหนด Default Topic Template
-let targetTopicTemplate = options.topic;
-if (!targetTopicTemplate) {
-    if (options.orgId) {
-        targetTopicTemplate = `tenants/${options.orgId}/devices/{deviceId}/telemetry`;
-    } else {
-        targetTopicTemplate = 'sensor/mock/data';
-    }
-}
-
-const publishOptions = {
-    qos: options.qos,
-    retain: options.retain
-};
-
-// อ่านไฟล์ Certificate (ถ้ามี)
-const tlsOptions = {};
-if (options.ca) tlsOptions.ca = fs.readFileSync(options.ca);
-if (options.cert) tlsOptions.cert = fs.readFileSync(options.cert);
-if (options.key) tlsOptions.key = fs.readFileSync(options.key);
-if (options.insecure) tlsOptions.rejectUnauthorized = false;
-
-let customTemplate = null;
-if (options.template) {
-    try {
-        customTemplate = fs.readFileSync(options.template, 'utf-8');
-    } catch (err) {
-        console.error(`❌ Failed to read template file: ${err.message}`);
+async function main() {
+    if (![0, 1, 2].includes(options.qos)) {
+        console.error('❌ Error: QoS must be 0, 1, or 2');
         process.exit(1);
     }
-}
 
-const deviceList = Array.from({ length: options.devices }, (_, index) => {
-    return options.deviceId && options.devices === 1
-        ? options.deviceId
-        : `mock-device-${String(index + 1).padStart(3, '0')}`;
-});
-
-const selectedPreset = options.preset || options.type;
-
-console.log(`🔌 Initializing MQTT simulation for ${deviceList.length} device(s)...`);
-console.log(
-    `📋 Configuration: Schema v${effectiveSchemaVersion} | Preset: "${selectedPreset}" | Anomaly: ${options.anomalyRate}% (${options.anomalyType})`
-);
-console.log(`📡 Topic Template: ${targetTopicTemplate}`);
-if (options.independentClients) {
-    console.log(`⚡ Mode: Independent Client Sockets (1 TCP socket per device)`);
-}
-
-// ──────────────────────────────────────────────────────────
-// Helper: Function สร้าง Message ประจำ Device
-// ──────────────────────────────────────────────────────────
-function createDeviceMessage(devId) {
-    return generatePayload(options.type, {
-        deviceId: devId,
-        template: customTemplate,
-        preset: options.preset,
-        anomalyRate: options.anomalyRate,
-        anomalyType: options.anomalyType,
-        schemaVersion: effectiveSchemaVersion,
-        orgId: options.orgId,
-        epochTimestamp: options.epochTimestamp
-    });
-}
-
-// ──────────────────────────────────────────────────────────
-// Concurrency Engine: Single Connection vs Multi-Socket Pool
-// ──────────────────────────────────────────────────────────
-let activeClients = [];
-let activeIntervals = [];
-let publishedCounts = new Map();
-deviceList.forEach((d) => publishedCounts.set(d, 0));
-
-function checkExitCondition() {
-    if (!options.count) return;
-    const allDone = deviceList.every((d) => publishedCounts.get(d) >= options.count);
-    if (allDone) {
-        console.log(`\n✅ Published ${options.count} message(s) per device successfully. Exiting.`);
-        shutdownAndExit(0);
+    if (options.anomalyType && !VALID_ANOMALY_TYPES.includes(options.anomalyType.toLowerCase())) {
+        console.error(`❌ Error: Invalid --anomaly-type "${options.anomalyType}".`);
+        process.exit(1);
     }
-}
 
-function shutdownAndExit(code = 0) {
-    activeIntervals.forEach((id) => clearInterval(id));
-    let remaining = activeClients.length;
-    if (remaining === 0) process.exit(code);
+    let effectiveSchemaVersion = options.schemaVersion;
+    if (!effectiveSchemaVersion) {
+        effectiveSchemaVersion =
+            options.preset && options.preset.toLowerCase().startsWith('sentinel-') ? 2 : 1;
+    }
 
-    activeClients.forEach((c) => {
-        c.end(false, () => {
-            remaining -= 1;
-            if (remaining <= 0) {
-                console.log('🔌 Disconnected all MQTT clients. Goodbye!');
-                process.exit(code);
-            }
-        });
+    if (options.orgId && !UUID_REGEX.test(options.orgId)) {
+        console.error(
+            `❌ Error: Invalid --org-id format "${options.orgId}". Must be a valid UUID.`
+        );
+        process.exit(1);
+    }
+
+    if (options.shadow && !options.orgId) {
+        console.error(
+            '❌ Error: --shadow requires --org-id for topic construction (tenants/{orgId}/devices/{deviceId}/shadow/...)'
+        );
+        process.exit(1);
+    }
+
+    let targetTopicTemplate = options.topic;
+    if (!targetTopicTemplate) {
+        targetTopicTemplate = options.orgId
+            ? `tenants/${options.orgId}/devices/{deviceId}/telemetry`
+            : 'sensor/mock/data';
+    }
+
+    const deviceList = Array.from({ length: options.devices }, (_, index) => {
+        return options.deviceId && options.devices === 1
+            ? options.deviceId
+            : `mock-device-${String(index + 1).padStart(3, '0')}`;
     });
-}
 
-if (options.independentClients) {
-    // ── Mode A: True Independent Sockets (1 Client ต่อ 1 Device) ───────────
+    // ──────────────────────────────────────────────────────────
+    // 1. Dynamic Enrollment Bootstrap (Optional)
+    // ──────────────────────────────────────────────────────────
+    let runtimeUsername = options.username;
+    let runtimePassword = options.password;
+
+    if (options.enrollUrl && options.enrollToken) {
+        try {
+            const primaryDevId = deviceList[0];
+            const credentials = await enrollDevice(
+                options.enrollUrl,
+                primaryDevId,
+                options.enrollToken
+            );
+            runtimeUsername = credentials.username;
+            runtimePassword = credentials.password;
+        } catch (err) {
+            console.error(`❌ Enrollment failed: ${err.message}`);
+            process.exit(1);
+        }
+    }
+
+    // ──────────────────────────────────────────────────────────
+    // 2. Concurrency & Runtime Loop
+    // ──────────────────────────────────────────────────────────
+    const tlsOptions = {};
+    if (options.ca) tlsOptions.ca = fs.readFileSync(options.ca);
+    if (options.cert) tlsOptions.cert = fs.readFileSync(options.cert);
+    if (options.key) tlsOptions.key = fs.readFileSync(options.key);
+    if (options.insecure) tlsOptions.rejectUnauthorized = false;
+
+    let activeClients = [];
+    let activeIntervals = new Map();
+    let publishedCounts = new Map();
+    deviceList.forEach((d) => publishedCounts.set(d, 0));
+
+    function shutdownAndExit(code = 0) {
+        activeIntervals.forEach((id) => clearInterval(id));
+        let remaining = activeClients.length;
+        if (remaining === 0) process.exit(code);
+
+        activeClients.forEach((c) => {
+            c.end(false, () => {
+                remaining -= 1;
+                if (remaining <= 0) {
+                    console.log('🔌 Disconnected all MQTT clients. Goodbye!');
+                    process.exit(code);
+                }
+            });
+        });
+    }
+
+    function checkExitCondition() {
+        if (!options.count) return;
+        const allDone = deviceList.every((d) => publishedCounts.get(d) >= options.count);
+        if (allDone) {
+            console.log(
+                `\n✅ Published ${options.count} message(s) per device successfully. Exiting.`
+            );
+            shutdownAndExit(0);
+        }
+    }
+
+    console.log(`🔌 Initializing MQTT simulation for ${deviceList.length} device(s)...`);
+    console.log(
+        `📋 Config: Schema v${effectiveSchemaVersion} | Preset: "${options.preset || options.type}" | Shadow: ${options.shadow ? 'ENABLED' : 'DISABLED'}`
+    );
+    if (options.chaosJitter)
+        console.log(`⚡ Chaos: Jitter enabled (up to ${options.chaosJitter}ms)`);
+    if (options.chaosDisconnect)
+        console.log(`⚡ Chaos: Random ungraceful disconnect (${options.chaosDisconnect}%)`);
+
     deviceList.forEach((devId) => {
         const connOpts = {
             clientId: `mock_sensor_${devId}_${Math.random().toString(16).substring(2, 6)}`,
@@ -202,87 +199,114 @@ if (options.independentClients) {
             reconnectPeriod: 3000,
             ...tlsOptions
         };
-        if (options.username) connOpts.username = options.username;
-        if (options.password) connOpts.password = options.password;
+        if (runtimeUsername) connOpts.username = runtimeUsername;
+        if (runtimePassword) connOpts.password = runtimePassword;
 
         const client = mqtt.connect(options.broker, connOpts);
         activeClients.push(client);
 
         client.on('connect', () => {
-            console.log(`✅ [${devId}] Connected via independent socket.`);
-            const intervalId = setInterval(() => {
-                const count = publishedCounts.get(devId);
-                if (options.count && count >= options.count) {
-                    clearInterval(intervalId);
-                    checkExitCondition();
-                    return;
-                }
+            console.log(`✅ [${devId}] Connected to broker.`);
 
-                const targetTopic = targetTopicTemplate
-                    .replace(/\{deviceId\}/g, devId)
-                    .replace(/\{orgId\}/g, options.orgId || '');
-                const message = createDeviceMessage(devId);
+            // Start Device Shadow
+            let currentIntervalMs = options.interval;
+            if (options.shadow) {
+                const shadow = new ShadowManager(
+                    client,
+                    options.orgId,
+                    devId,
+                    { interval: currentIntervalMs },
+                    (delta) => {
+                        if (
+                            delta.samplingInterval &&
+                            delta.samplingInterval !== currentIntervalMs
+                        ) {
+                            console.log(
+                                `🔄 [Runtime:${devId}] Adjusting publishing interval to ${delta.samplingInterval}ms`
+                            );
+                            currentIntervalMs = delta.samplingInterval;
+                            restartDeviceLoop(devId, client, currentIntervalMs);
+                        }
+                    }
+                );
+                shadow.init();
+            }
 
-                client.publish(targetTopic, message, publishOptions, (err) => {
-                    if (err) console.error(`❌ [${devId}] Publish error: ${err.message}`);
-                });
-                console.log(`📤 [${devId}] -> ${message}`);
-
-                publishedCounts.set(devId, count + 1);
-                checkExitCondition();
-            }, options.interval);
-            activeIntervals.push(intervalId);
+            startDeviceLoop(devId, client, currentIntervalMs);
         });
 
         client.on('error', (err) => {
             console.error(`⚠️ [${devId}] Connection error:`, err.message);
         });
     });
-} else {
-    // ── Mode B: Multiplexed Single Client (ค่าเริ่มต้นเดิม) ─────────────────
-    const connOpts = {
-        clientId: `mock_sensor_pool_${Math.random().toString(16).substring(2, 10)}`,
-        clean: true,
-        connectTimeout: 5000,
-        reconnectPeriod: 3000,
-        ...tlsOptions
-    };
-    if (options.username) connOpts.username = options.username;
-    if (options.password) connOpts.password = options.password;
 
-    const client = mqtt.connect(options.broker, connOpts);
-    activeClients.push(client);
+    function startDeviceLoop(devId, client, intervalMs) {
+        const intervalId = setInterval(async () => {
+            const count = publishedCounts.get(devId);
+            if (options.count && count >= options.count) {
+                clearInterval(intervalId);
+                checkExitCondition();
+                return;
+            }
 
-    client.on('connect', () => {
-        console.log(`✅ Connected to broker! Simulating ${deviceList.length} device(s)...`);
-        const intervalId = setInterval(() => {
-            deviceList.forEach((devId) => {
-                const count = publishedCounts.get(devId);
-                if (options.count && count >= options.count) return;
+            // Chaos: Random connect Ungraceful Drop
+            if (options.chaosDisconnect && Math.random() * 100 < options.chaosDisconnect) {
+                console.warn(`💥 [Chaos:${devId}] Simulating sudden unclean network drop!`);
+                if (client.stream) client.stream.destroy();
+                return;
+            }
 
-                const targetTopic = targetTopicTemplate
-                    .replace(/\{deviceId\}/g, devId)
-                    .replace(/\{orgId\}/g, options.orgId || '');
-                const message = createDeviceMessage(devId);
+            // Chaos: Random Add Jitter Latency
+            if (options.chaosJitter > 0) {
+                const delay = Math.floor(Math.random() * options.chaosJitter);
+                await new Promise((r) => setTimeout(r, delay));
+            }
 
-                client.publish(targetTopic, message, publishOptions, (err) => {
-                    if (err) console.error(`❌ Publish error: ${err.message}`);
-                });
-                console.log(`📤 ${devId} -> ${message}`);
+            const targetTopic = targetTopicTemplate
+                .replace(/\{deviceId\}/g, devId)
+                .replace(/\{orgId\}/g, options.orgId || '');
 
-                publishedCounts.set(devId, count + 1);
+            const message = generatePayload(options.type, {
+                deviceId: devId,
+                preset: options.preset,
+                anomalyRate: options.anomalyRate,
+                anomalyType: options.anomalyType,
+                schemaVersion: effectiveSchemaVersion,
+                orgId: options.orgId,
+                epochTimestamp: options.epochTimestamp
             });
-            checkExitCondition();
-        }, options.interval);
-        activeIntervals.push(intervalId);
-    });
 
-    client.on('error', (err) => {
-        console.error('⚠️ Connection error:', err.message);
+            client.publish(
+                targetTopic,
+                message,
+                { qos: options.qos, retain: options.retain },
+                (err) => {
+                    if (err) console.error(`❌ [${devId}] Publish error: ${err.message}`);
+                }
+            );
+            console.log(`📤 [${devId}] -> ${message}`);
+
+            publishedCounts.set(devId, count + 1);
+            checkExitCondition();
+        }, intervalMs);
+
+        activeIntervals.set(devId, intervalId);
+    }
+
+    function restartDeviceLoop(devId, client, newIntervalMs) {
+        if (activeIntervals.has(devId)) {
+            clearInterval(activeIntervals.get(devId));
+        }
+        startDeviceLoop(devId, client, newIntervalMs);
+    }
+
+    process.on('SIGINT', () => {
+        console.log('\n🛑 Gracefully shutting down...');
+        shutdownAndExit(0);
     });
 }
 
-process.on('SIGINT', () => {
-    console.log('\n🛑 Gracefully shutting down...');
-    shutdownAndExit(0);
+main().catch((err) => {
+    console.error('Fatal error:', err);
+    process.exit(1);
 });

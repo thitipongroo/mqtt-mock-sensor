@@ -155,7 +155,7 @@ mock-sensor --template ./template.json
 
 mqtt-mock-sensor is fully compatible with Sentinel IoT Platform's Ingestion Engine, Alert Engine, and Device Shadow Service.
 
-**1. Basic Ingestion (Schema v2 + Multi-Tenancy)
+**1. Basic Ingestion (Schema v2 + Multi-Tenancy)**
 
 Publishes rich Schema v2 telemetry directly to the tenant's device topic (tenants/{orgId}/devices/{deviceId}/telemetry):
 
@@ -169,7 +169,7 @@ mqtt-mock-sensor \
   --count 10
 ```
 
-**2. Testing Sentinel Alerts & Quality Filtering
+**2. Testing Sentinel Alerts & Quality Filtering**
 
 Trigger CRITICAL alerts to test notification delivery (Slack, Telegram, LINE):
 
@@ -195,7 +195,7 @@ mqtt-mock-sensor \
   --anomaly-type quality
 ```
 
-**3. Negative Testing & Dead Letter Queue (DLQ)
+**3. Negative Testing & Dead Letter Queue (DLQ)**
 
 Inject physically impossible data (e.g. Temperature = 250°C > TEMP_MAX) to verify DLQ routing to factory/telemetry/dlq:
 
@@ -210,7 +210,7 @@ mqtt-mock-sensor \
   --count 1
 ```
 
-**4. Bi-directional Device Shadow (Twin) Synchronization
+**4. Bi-directional Device Shadow (Twin) Synchronization**
 
 Listens for Delta notifications from Sentinel and reconciles runtime state:
 
@@ -224,7 +224,7 @@ mqtt-mock-sensor \
   -i 3000
 ```
 
-**5. High-Scale Concurrency & Chaos Testing
+**5. High-Scale Concurrency & Chaos Testing**
 
 Simulate 20 devices with independent TCP sockets, network latency jitter, and random connection drops:
 

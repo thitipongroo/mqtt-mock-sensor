@@ -92,6 +92,11 @@ async function main() {
             options.preset && options.preset.toLowerCase().startsWith('sentinel-') ? 2 : 1;
     }
 
+    if (![1, 2].includes(effectiveSchemaVersion)) {
+        console.error('❌ Error: --schema-version must be 1 or 2');
+        process.exit(1);
+    }
+
     if (options.orgId && !UUID_REGEX.test(options.orgId)) {
         console.error(
             `❌ Error: Invalid --org-id format "${options.orgId}". Must be a valid UUID.`
@@ -104,6 +109,16 @@ async function main() {
             '❌ Error: --shadow requires --org-id for topic construction (tenants/{orgId}/devices/{deviceId}/shadow/...)'
         );
         process.exit(1);
+    }
+
+    let customTemplate = null;
+    if (options.template) {
+        try {
+            customTemplate = fs.readFileSync(options.template, 'utf-8');
+        } catch (err) {
+            console.error(`❌ Failed to read template file: ${err.message}`);
+            process.exit(1);
+        }
     }
 
     let targetTopicTemplate = options.topic;
@@ -119,9 +134,7 @@ async function main() {
             : `mock-device-${String(index + 1).padStart(3, '0')}`;
     });
 
-    // ──────────────────────────────────────────────────────────
     // 1. Dynamic Enrollment Bootstrap (Optional)
-    // ──────────────────────────────────────────────────────────
     let runtimeUsername = options.username;
     let runtimePassword = options.password;
 
@@ -141,18 +154,16 @@ async function main() {
         }
     }
 
-    // ──────────────────────────────────────────────────────────
     // 2. Concurrency & Runtime Loop
-    // ──────────────────────────────────────────────────────────
     const tlsOptions = {};
     if (options.ca) tlsOptions.ca = fs.readFileSync(options.ca);
     if (options.cert) tlsOptions.cert = fs.readFileSync(options.cert);
     if (options.key) tlsOptions.key = fs.readFileSync(options.key);
     if (options.insecure) tlsOptions.rejectUnauthorized = false;
 
-    let activeClients = [];
-    let activeIntervals = new Map();
-    let publishedCounts = new Map();
+    const activeClients = [];
+    const activeIntervals = new Map();
+    const publishedCounts = new Map();
     deviceList.forEach((d) => publishedCounts.set(d, 0));
 
     function shutdownAndExit(code = 0) {
@@ -182,18 +193,84 @@ async function main() {
         }
     }
 
+    function buildPayload(devId) {
+        return generatePayload(options.type, {
+            deviceId: devId,
+            template: customTemplate,
+            preset: options.preset,
+            anomalyRate: options.anomalyRate,
+            anomalyType: options.anomalyType,
+            schemaVersion: effectiveSchemaVersion,
+            orgId: options.orgId,
+            epochTimestamp: options.epochTimestamp
+        });
+    }
+
+    const useIndependentSockets = options.independentClients || options.shadow;
+
     console.log(`🔌 Initializing MQTT simulation for ${deviceList.length} device(s)...`);
     console.log(
         `📋 Config: Schema v${effectiveSchemaVersion} | Preset: "${options.preset || options.type}" | Shadow: ${options.shadow ? 'ENABLED' : 'DISABLED'}`
     );
+    if (useIndependentSockets) {
+        console.log('⚡ Mode: Independent Client Sockets (1 TCP socket per device)');
+    }
     if (options.chaosJitter)
         console.log(`⚡ Chaos: Jitter enabled (up to ${options.chaosJitter}ms)`);
     if (options.chaosDisconnect)
         console.log(`⚡ Chaos: Random ungraceful disconnect (${options.chaosDisconnect}%)`);
 
-    deviceList.forEach((devId) => {
+    if (useIndependentSockets) {
+        deviceList.forEach((devId) => {
+            const connOpts = {
+                clientId: `mock_sensor_${devId}_${Math.random().toString(16).substring(2, 6)}`,
+                clean: true,
+                connectTimeout: 5000,
+                reconnectPeriod: 3000,
+                ...tlsOptions
+            };
+            if (runtimeUsername) connOpts.username = runtimeUsername;
+            if (runtimePassword) connOpts.password = runtimePassword;
+
+            const client = mqtt.connect(options.broker, connOpts);
+            activeClients.push(client);
+
+            client.on('connect', () => {
+                console.log(`✅ [${devId}] Connected to broker.`);
+
+                let currentIntervalMs = options.interval;
+                if (options.shadow) {
+                    const shadow = new ShadowManager(
+                        client,
+                        options.orgId,
+                        devId,
+                        { interval: currentIntervalMs },
+                        (delta) => {
+                            if (
+                                delta.samplingInterval &&
+                                delta.samplingInterval !== currentIntervalMs
+                            ) {
+                                console.log(
+                                    `🔄 [Runtime:${devId}] Adjusting publishing interval to ${delta.samplingInterval}ms`
+                                );
+                                currentIntervalMs = delta.samplingInterval;
+                                restartDeviceLoop(devId, client, currentIntervalMs);
+                            }
+                        }
+                    );
+                    shadow.init();
+                }
+
+                startDeviceLoop(devId, client, currentIntervalMs);
+            });
+
+            client.on('error', (err) => {
+                console.error(`⚠️ [${devId}] Connection error:`, err.message);
+            });
+        });
+    } else {
         const connOpts = {
-            clientId: `mock_sensor_${devId}_${Math.random().toString(16).substring(2, 6)}`,
+            clientId: `mock_sensor_pool_${Math.random().toString(16).substring(2, 10)}`,
             clean: true,
             connectTimeout: 5000,
             reconnectPeriod: 3000,
@@ -206,39 +283,51 @@ async function main() {
         activeClients.push(client);
 
         client.on('connect', () => {
-            console.log(`✅ [${devId}] Connected to broker.`);
+            console.log(`✅ Connected to broker! Simulating ${deviceList.length} device(s)...`);
+            const intervalId = setInterval(async () => {
+                if (options.chaosDisconnect && Math.random() * 100 < options.chaosDisconnect) {
+                    console.warn('💥 [Chaos] Simulating sudden unclean network drop!');
+                    if (client.stream) client.stream.destroy();
+                    return;
+                }
 
-            // Start Device Shadow
-            let currentIntervalMs = options.interval;
-            if (options.shadow) {
-                const shadow = new ShadowManager(
-                    client,
-                    options.orgId,
-                    devId,
-                    { interval: currentIntervalMs },
-                    (delta) => {
-                        if (
-                            delta.samplingInterval &&
-                            delta.samplingInterval !== currentIntervalMs
-                        ) {
-                            console.log(
-                                `🔄 [Runtime:${devId}] Adjusting publishing interval to ${delta.samplingInterval}ms`
-                            );
-                            currentIntervalMs = delta.samplingInterval;
-                            restartDeviceLoop(devId, client, currentIntervalMs);
-                        }
+                for (const devId of deviceList) {
+                    const count = publishedCounts.get(devId);
+                    if (options.count && count >= options.count) continue;
+
+                    if (options.chaosJitter > 0) {
+                        const delay = Math.floor(Math.random() * options.chaosJitter);
+                        await new Promise((r) => setTimeout(r, delay));
                     }
-                );
-                shadow.init();
-            }
 
-            startDeviceLoop(devId, client, currentIntervalMs);
+                    const targetTopic = targetTopicTemplate
+                        .replace(/\{deviceId\}/g, devId)
+                        .replace(/\{orgId\}/g, options.orgId || '');
+
+                    const message = buildPayload(devId);
+
+                    client.publish(
+                        targetTopic,
+                        message,
+                        { qos: options.qos, retain: options.retain },
+                        (err) => {
+                            if (err) console.error(`❌ [${devId}] Publish error: ${err.message}`);
+                        }
+                    );
+                    console.log(`📤 [${devId}] -> ${message}`);
+
+                    publishedCounts.set(devId, count + 1);
+                }
+                checkExitCondition();
+            }, options.interval);
+
+            activeIntervals.set('pool', intervalId);
         });
 
         client.on('error', (err) => {
-            console.error(`⚠️ [${devId}] Connection error:`, err.message);
+            console.error('⚠️ Connection error:', err.message);
         });
-    });
+    }
 
     function startDeviceLoop(devId, client, intervalMs) {
         const intervalId = setInterval(async () => {
@@ -249,14 +338,12 @@ async function main() {
                 return;
             }
 
-            // Chaos: Random connect Ungraceful Drop
             if (options.chaosDisconnect && Math.random() * 100 < options.chaosDisconnect) {
                 console.warn(`💥 [Chaos:${devId}] Simulating sudden unclean network drop!`);
                 if (client.stream) client.stream.destroy();
                 return;
             }
 
-            // Chaos: Random Add Jitter Latency
             if (options.chaosJitter > 0) {
                 const delay = Math.floor(Math.random() * options.chaosJitter);
                 await new Promise((r) => setTimeout(r, delay));
@@ -266,15 +353,7 @@ async function main() {
                 .replace(/\{deviceId\}/g, devId)
                 .replace(/\{orgId\}/g, options.orgId || '');
 
-            const message = generatePayload(options.type, {
-                deviceId: devId,
-                preset: options.preset,
-                anomalyRate: options.anomalyRate,
-                anomalyType: options.anomalyType,
-                schemaVersion: effectiveSchemaVersion,
-                orgId: options.orgId,
-                epochTimestamp: options.epochTimestamp
-            });
+            const message = buildPayload(devId);
 
             client.publish(
                 targetTopic,

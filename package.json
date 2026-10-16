@@ -9,7 +9,9 @@
     },
     "files": [
         "index.js",
-        "payloadGenerator.js"
+        "payloadGenerator.js",
+        "shadowManager.js",
+        "enrollmentHelper.js"
     ],
     "repository": {
         "type": "git",

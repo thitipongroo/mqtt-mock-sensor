@@ -6,7 +6,7 @@
 
 A zero-config, feature-rich CLI tool to generate and stream realistic mock IoT telemetry data to any MQTT broker. Built to accelerate IoT backend development, cloud data pipelines, and AI/ML anomaly detection testing without physical hardware.
 
-## 📦 Installation
+## 📦 Installation & Quick Start
 
 Run instantly with `npx` (No installation needed):
 
@@ -32,27 +32,42 @@ Or
 mqtt-mock-sensor [options]
 ```
 
+```bash
+mqtt-mock-sensor --help
+```
+
 ## ⚙️ Command-Line Options
 
-| Option                | Type    | Default                        | Description                                                        |
-| --------------------- | ------- | ------------------------------ | ------------------------------------------------------------------ |
-| -b, --broker [url]    | string  | mqtts://broker.hivemq.com:8883 | MQTT Broker URL (Supports mqtt://, mqtts://, ws://, wss://)        |
-| -t, --topic [topic]   | string  | sensor/mock/data               | Target topic. Supports {deviceId} placeholder for dynamic routing  |
-| -i, --interval [ms]   | number  | 2000                           | Stream interval between messages in milliseconds                   |
-| --type < type >       | string  | env                            | Sensor telemetry preset: env, gps, power                           |
-| -d, --device-id [id]  | string  | Auto-generated                 | Static device identifier for session                               |
-| --devices [count]     | number  | 1                              | Number of concurrent devices to simulate                           |
-| -q, --qos [0,1,2]     | number  | 0                              | MQTT Quality of Service level                                      |
-| -r, --retain          | boolean | false                          | Enable MQTT retain message flag                                    |
-| --count [n]           | number  | Unlimited                      | Automatically stop and exit after publishing N messages per device |
-| --anomaly-rate [pct]  | number  | 0                              | Percentage of messages to inject extreme metric anomalies (0-100)  |
-| --template [path]     | string  | -                              | Path to a custom JSON template file                                |
-| -u, --username [user] | string  | -                              | Broker authentication username                                     |
-| -p, --password [pass] | string  | -                              | Broker authentication password                                     |
-| --ca [file]           | string  | -                              | Path to custom Root CA certificate                                 |
-| --cert [file]         | string  | -                              | Path to client certificate (mTLS)                                  |
-| --key [file]          | string  | -                              | Path to client private key (mTLS)                                  |
-| --insecure            | boolean | false                          | Allow self-signed SSL/TLS certificates                             |
+| Option                   | Type    | Default                        | Description                                                             |
+| ------------------------ | ------- | ------------------------------ | ----------------------------------------------------------------------- |
+| -b, --broker [url]       | string  | mqtts://broker.hivemq.com:8883 | MQTT Broker URL (Supports mqtt://, mqtts://, ws://, wss://)             |
+| -t, --topic [topic]      | string  | sensor/mock/data               | Target topic. Supports {deviceId} placeholder for dynamic routing       |
+| -i, --interval [ms]      | number  | 2000                           | Stream interval between messages in milliseconds                        |
+| --type < type >          | string  | env                            | Sensor telemetry preset: env, gps, power                                |
+| -d, --device-id [id]     | string  | Auto-generated                 | Static device identifier for session                                    |
+| --devices [count]        | number  | 1                              | Number of concurrent devices to simulate                                |
+| --schema-version [1,2]   | number  | 1                              | Telemetry schema version: 1 (legacy flat) or 2 (Sentinel rich readings) |
+| --org-id [uuid]          | string  | optional                       | Organization/Tenant UUID for multi-tenant isolation                     |
+| --epoch-timestamp        | boolean | false                          | Force numeric Unix epoch milliseconds timestamp (Date.now())            |
+| --preset [name]          | string  | optional                       | Domain presets: [domain]-env, [domain]-industrial, [domain]-air         |
+| -q, --qos [0,1,2]        | number  | 0                              | MQTT Quality of Service level                                           |
+| -r, --retain             | boolean | false                          | Enable MQTT retain message flag                                         |
+| --count [n]              | number  | Unlimited                      | Automatically stop and exit after publishing N messages per device      |
+| --anomaly-rate [pct]     | number  | 0                              | Percentage of messages to inject extreme metric anomalies (0-100)       |
+| --anomaly-type [type]    | string  | critical                       | Anomaly type: critical, warning, quality, or out-of-bounds.             |
+| --independent-clients    | boolean | false                          | Spawn separate TCP/TLS client sockets per device (true concurrency)     |
+| --shadow                 | boolean | false                          | Enable bi-directional AWS IoT-style Device Shadow synchronization.      |
+| --enroll-url [url]       | string  | optional                       | REST API endpoint to bootstrap dynamic MQTT credentials                 |
+| --enroll-token [token]   | string  | optional                       | Single-use device enrollment bootstrap token                            |
+| --chaos-jitter [ms].     | number  | 0                              | Inject random network latency up to N ms before publishing              |
+| --chaos-disconnect [pct] | number  | 0                              | Simulate sudden ungraceful TCP network drops (0 - 100%)                 |
+| --template [path]        | string  | -                              | Path to a custom JSON template file                                     |
+| -u, --username [user]    | string  | -                              | Broker authentication username                                          |
+| -p, --password [pass]    | string  | -                              | Broker authentication password                                          |
+| --ca [file]              | string  | -                              | Path to custom Root CA certificate                                      |
+| --cert [file]            | string  | -                              | Path to client certificate (mTLS)                                       |
+| --key [file]             | string  | -                              | Path to client private key (mTLS)                                       |
+| --insecure               | boolean | false                          | Allow self-signed SSL/TLS certificates                                  |
 
 ### 💡 Examples
 
@@ -135,6 +150,94 @@ mock-sensor --template ./template.json
 - {{randomInt}}: Random integer between 0 - 99
 
 - {{randomFloat}}: Random float with 2 decimal places (0.00 - 99.99)
+
+### 🛡️ Integration Guide (Example - Sentinel IoT Platform )
+
+mqtt-mock-sensor is fully compatible with Sentinel IoT Platform's Ingestion Engine, Alert Engine, and Device Shadow Service.
+
+**1. Basic Ingestion (Schema v2 + Multi-Tenancy)
+
+Publishes rich Schema v2 telemetry directly to the tenant's device topic (tenants/{orgId}/devices/{deviceId}/telemetry):
+
+```bash
+mqtt-mock-sensor \
+  -b mqtt://localhost:1883 \
+  -d "factory-sensor-01" \
+  --org-id "00000000-0000-0000-0000-000000000001" \
+  --preset sentinel-env \
+  --schema-version 2 \
+  --count 10
+```
+
+**2. Testing Sentinel Alerts & Quality Filtering
+
+Trigger CRITICAL alerts to test notification delivery (Slack, Telegram, LINE):
+
+```bash
+mqtt-mock-sensor \
+  -b mqtt://localhost:1883 \
+  -d "furnace-sensor-01" \
+  --org-id "00000000-0000-0000-0000-000000000001" \
+  --preset sentinel-industrial \
+  --anomaly-rate 100 \
+  --anomaly-type critical
+```
+
+Test Alert Suppression by injecting degraded sensor data (quality: "UNCERTAIN" / "BAD"):
+
+```bash
+mqtt-mock-sensor \
+  -b mqtt://localhost:1883 \
+  -d "noisy-sensor-01" \
+  --preset sentinel-env \
+  --org-id "00000000-0000-0000-0000-000000000001" \
+  --anomaly-rate 100 \
+  --anomaly-type quality
+```
+
+**3. Negative Testing & Dead Letter Queue (DLQ)
+
+Inject physically impossible data (e.g. Temperature = 250°C > TEMP_MAX) to verify DLQ routing to factory/telemetry/dlq:
+
+```bash
+mqtt-mock-sensor \
+  -b mqtt://localhost:1883 \
+  -d "malformed-sensor-01" \
+  --preset sentinel-env \
+  --org-id "00000000-0000-0000-0000-000000000001" \
+  --anomaly-rate 100 \
+  --anomaly-type out-of-bounds \
+  --count 1
+```
+
+**4. Bi-directional Device Shadow (Twin) Synchronization
+
+Listens for Delta notifications from Sentinel and reconciles runtime state:
+
+```bash
+mqtt-mock-sensor \
+  -b mqtt://localhost:1883 \
+  -d "twin-device-01" \
+  --org-id "00000000-0000-0000-0000-000000000001" \
+  --preset sentinel-env \
+  --shadow \
+  -i 3000
+```
+
+**5. High-Scale Concurrency & Chaos Testing
+
+Simulate 20 devices with independent TCP sockets, network latency jitter, and random connection drops:
+
+```bash
+mqtt-mock-sensor \
+  -b mqtt://localhost:1883 \
+  --devices 20 \
+  --org-id "00000000-0000-0000-0000-000000000001" \
+  --preset sentinel-industrial \
+  --independent-clients \
+  --chaos-jitter 300 \
+  --chaos-disconnect 5
+```
 
 ## 💡 Example Outputs
 

@@ -3,6 +3,7 @@
 [![NPM Version](https://img.shields.io/npm/v/mqtt-mock-sensor?style=flat&color=CB3837&logo=npm)](https://www.npmjs.com/package/mqtt-mock-sensor)
 [![NPM Downloads](https://img.shields.io/npm/dt/mqtt-mock-sensor?style=flat&color=28a745)](https://www.npmjs.com/package/mqtt-mock-sensor)
 [![CI Testing](https://github.com/thitipongroo/mqtt-mock-sensor/actions/workflows/ci.yml/badge.svg)](https://github.com/thitipongroo/mqtt-mock-sensor/actions/workflows/ci.yml)
+[![GitHub Sponsors](https://img.shields.io/badge/Sponsor-%E2%9D%A4-ea4aaa?style=flat&logo=github)](https://github.com/sponsors/thitipongroo)
 
 A zero-config, feature-rich CLI tool to generate and stream realistic mock IoT telemetry data to any MQTT broker. Built to accelerate IoT backend development, cloud data pipelines, and AI/ML anomaly detection testing without physical hardware.
 
@@ -260,6 +261,28 @@ Depending on the `--type` flag, the payload will change:
 ```json
 📤 Published: {"deviceId":"mock-device-109","timestamp":"2023-10-27T10:00:04.000Z","voltage":"220.50","current":"5.20","power":"1146.60"}
 ```
+
+## 💖 Corporate Sponsors & Backers
+
+Support open-source IoT tooling! `mqtt-mock-sensor` helps thousands of developers, QA teams, and cloud architects simulate realistic IoT telemetry, load test MQTT brokers, and validate cloud pipelines without physical hardware.
+
+If your organization benefits from `mqtt-mock-sensor`, consider becoming a corporate sponsor. Sponsoring helps ensure active maintenance, fast issue turnaround, and continuous feature expansion.
+
+### 🏢 Sponsorship Tiers
+
+| Tier | Sponsor | Benefits & Visibility |
+| :--- | :---: | :--- |
+| **🥇 Platinum Sponsor**<br/>`$250/mo` | <a href="https://github.com/sponsors/thitipongroo"><img src="https://via.placeholder.com/260x80/1a1e24/ea4aaa?text=+Your+Company+Logo+" alt="Platinum Sponsor Logo" width="220"/></a> | • **Large Logo** prominently displayed at top of README & documentation<br/>• Direct backlink to your website/product<br/>• Priority issue triage & feature request consideration |
+| **🥈 Silver Sponsor**<br/>`$100/mo` | <a href="https://github.com/sponsors/thitipongroo"><img src="https://via.placeholder.com/200x60/1a1e24/ea4aaa?text=+Your+Logo+" alt="Silver Sponsor Logo" width="160"/></a> | • **Medium Logo** featured in README & release announcements<br/>• Backlink to your homepage or product page |
+| **🥉 Bronze / Backer**<br/>`$25/mo` | <a href="https://github.com/sponsors/thitipongroo"><img src="https://via.placeholder.com/140x45/1a1e24/ea4aaa?text=+Your+Name+" alt="Backer" width="110"/></a> | • Recognition in the Backers & Contributors roster<br/>• Profile mention in release notes |
+
+<p align="center">
+  <a href="https://github.com/sponsors/thitipongroo">
+    <img src="https://img.shields.io/badge/Sponsor_on_GitHub-EA4AAA?style=for-the-badge&logo=githubsponsors&logoColor=white" alt="Sponsor on GitHub" height="38"/>
+  </a>
+</p>
+
+> 💬 **Custom Invoicing & Partnerships:** Need corporate invoicing, wire transfers, or custom sponsorship arrangements? Please reach out via [GitHub Sponsors](https://github.com/sponsors/thitipongroo) or open a discussion!
 
 ## 🤝 Contributing
 

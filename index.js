@@ -11,6 +11,13 @@ const fs = require('fs');
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const VALID_ANOMALY_TYPES = ['critical', 'warning', 'quality', 'out-of-bounds'];
 
+function printCta() {
+    console.log('⭐ Enjoying mqtt-mock-sensor? Star us on GitHub & consider Sponsoring!');
+    console.log(
+        '🚀 Want a Visual Web Dashboard with 100k scale? Join waitlist: https://pulseiot.io'
+    );
+}
+
 program
     .version(version)
     .description(description)
@@ -189,6 +196,8 @@ async function main() {
             console.log(
                 `\n✅ Published ${options.count} message(s) per device successfully. Exiting.`
             );
+            printCta();
+            console.log();
             shutdownAndExit(0);
         }
     }
@@ -208,6 +217,8 @@ async function main() {
 
     const useIndependentSockets = options.independentClients || options.shadow;
 
+    printCta();
+    console.log();
     console.log(`🔌 Initializing MQTT simulation for ${deviceList.length} device(s)...`);
     console.log(
         `📋 Config: Schema v${effectiveSchemaVersion} | Preset: "${options.preset || options.type}" | Shadow: ${options.shadow ? 'ENABLED' : 'DISABLED'}`
@@ -381,6 +392,8 @@ async function main() {
 
     process.on('SIGINT', () => {
         console.log('\n🛑 Gracefully shutting down...');
+        printCta();
+        console.log();
         shutdownAndExit(0);
     });
 }

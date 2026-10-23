@@ -17,7 +17,7 @@ function randomInRange(min, max, decimals = 2) {
 }
 
 // ──────────────────────────────────────────────────────────
-// 1. Domain Readings Generators สำหรับ Sentinel
+// 1. Domain Readings Generators
 // ──────────────────────────────────────────────────────────
 
 function generateEnvReadings(anomalyMode, quality) {

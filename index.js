@@ -94,16 +94,16 @@ async function main() {
     if (options.ui) {
         console.log('\n🚀 PulseIoT Visual Web Dashboard (Private Beta)');
         console.log('⚡ Simulate 100,000 IoT Sensors & Test Chaos Scenarios in Your Browser!');
-        console.log('🌐 Opening waitlist in your browser: https://pulseiot-cloud.io\n');
+        console.log('🌐 Opening waitlist in your browser: https://pulseiot-cloud.com\n');
 
         const openCmd =
             process.platform === 'darwin'
                 ? 'open'
                 : process.platform === 'win32'
-                  ? 'start ""'
-                  : 'xdg-open';
+                    ? 'start ""'
+                    : 'xdg-open';
 
-        exec(`${openCmd} "https://pulseiot-cloud.io"`, () => {});
+        exec(`${openCmd} "https://pulseiot-cloud.com"`, () => { });
         return;
     }
 

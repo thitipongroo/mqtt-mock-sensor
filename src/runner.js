@@ -4,7 +4,7 @@ const { ShadowManager } = require('./shadowManager');
 function printCta() {
     console.log('⭐ Enjoying mqtt-mock-sensor? Star us on GitHub & consider Sponsoring!');
     console.log(
-        '🚀 Want a Visual Web Dashboard with 100k scale? Join waitlist: https://pulseiot.io'
+        '🚀 Want a Visual Web Dashboard with 100k scale? Join waitlist: https://pulseiot-cloud.com'
     );
 }
 

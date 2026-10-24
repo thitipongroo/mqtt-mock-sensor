@@ -1,4 +1,4 @@
-const { ShadowManager } = require('./shadowManager');
+const { ShadowManager } = require('../src/shadowManager');
 
 describe('ShadowManager - Phase 3 Test Suite', () => {
     let mockClient;

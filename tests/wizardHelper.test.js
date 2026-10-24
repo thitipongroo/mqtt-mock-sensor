@@ -3,7 +3,7 @@ const {
     parseBrokerChoice,
     parseDeviceCount,
     runWizard
-} = require('./wizardHelper');
+} = require('../src/wizardHelper');
 const { Writable } = require('stream');
 
 describe('wizardHelper', () => {

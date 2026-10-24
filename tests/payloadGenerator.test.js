@@ -1,4 +1,4 @@
-const { generatePayload } = require('./payloadGenerator');
+const { generatePayload } = require('../src/payloadGenerator');
 
 describe('Payload Generator - Complete Test Suite (Phase 1 & Phase 2)', () => {
     describe('Schema v1 (Backward Compatibility)', () => {

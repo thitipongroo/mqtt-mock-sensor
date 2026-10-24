@@ -1,4 +1,4 @@
-const { enrollDevice } = require('./enrollmentHelper');
+const { enrollDevice } = require('../src/enrollmentHelper');
 const http = require('http');
 const EventEmitter = require('events');
 

@@ -4,11 +4,11 @@ const { program } = require('commander');
 const { exec } = require('child_process');
 const fs = require('fs');
 const { version, description } = require('./package.json');
-const { enrollDevice } = require('./enrollmentHelper');
-const { CsvReplayer } = require('./csvReplayer');
-const { runWizard } = require('./wizardHelper');
-const { ClientManager } = require('./clientManager');
-const { SimulationRunner, printCta } = require('./runner');
+const { enrollDevice } = require('./src/enrollmentHelper');
+const { CsvReplayer } = require('./src/csvReplayer');
+const { runWizard } = require('./src/wizardHelper');
+const { ClientManager } = require('./src/clientManager');
+const { SimulationRunner, printCta } = require('./src/runner');
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const VALID_ANOMALY_TYPES = ['critical', 'warning', 'quality', 'out-of-bounds'];

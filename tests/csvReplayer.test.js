@@ -1,4 +1,4 @@
-const { CsvReplayer, parseCsvLine, castValue } = require('./csvReplayer');
+const { CsvReplayer, parseCsvLine, castValue } = require('../src/csvReplayer');
 
 describe('csvReplayer', () => {
     describe('parseCsvLine', () => {

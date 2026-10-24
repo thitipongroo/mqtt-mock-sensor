@@ -9,13 +9,7 @@
     },
     "files": [
         "index.js",
-        "clientManager.js",
-        "runner.js",
-        "payloadGenerator.js",
-        "shadowManager.js",
-        "enrollmentHelper.js",
-        "csvReplayer.js",
-        "wizardHelper.js"
+        "src"
     ],
     "repository": {
         "type": "git",

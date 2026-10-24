@@ -324,6 +324,46 @@ If your organization benefits from `mqtt-mock-sensor`, consider becoming a corpo
 
 > 💬 **Custom Invoicing & Partnerships:** Need corporate invoicing, wire transfers, or custom sponsorship arrangements? Please reach out via [GitHub Sponsors](https://github.com/sponsors/thitipongroo) or open a discussion!
 
+## 🏗️ Architecture & Project Structure
+
+The codebase adopts a **Pragmatic Modular Architecture** designed for clarity, testability, and zero-overhead performance:
+
+```text
+mqtt-mock-sensor/
+├── index.js                     # CLI Entry Point & Options Controller
+├── src/                         # Core runtime modules
+│   ├── clientManager.js         # MQTT socket connections, TLS/mTLS, LWT
+│   ├── runner.js                # Simulation lifecycle, interval loops, chaos timing
+│   ├── payloadGenerator.js      # Telemetry schemas (v1/v2), anomalies, presets
+│   ├── csvReplayer.js           # Historical CSV dataset replay engine
+│   ├── shadowManager.js         # Bi-directional Device Shadow delta reconciliation
+│   ├── enrollmentHelper.js      # Dynamic REST API device enrollment bootstrap
+│   └── wizardHelper.js          # Interactive terminal setup wizard
+├── tests/                       # Jest unit test suites
+│   ├── csvReplayer.test.js
+│   ├── enrollmentHelper.test.js
+│   ├── payloadGenerator.test.js
+│   ├── shadowManager.test.js
+│   └── wizardHelper.test.js
+├── DockerFile                   # Minimal production container build
+└── package.json
+```
+
+## 🧪 Development & Testing
+
+Clone the repository and run tests or linter locally:
+
+```bash
+# Run the complete test suite (43 unit tests)
+npm test
+
+# Check code style with ESLint
+npm run lint
+
+# Format code with Prettier
+npm run format
+```
+
 ## 🤝 Contributing
 
-Contributions, issues, and feature requests are welcome! Feel free to check the issues page.
+Contributions, issues, and feature requests are welcome! Feel free to check the [issues page](https://github.com/thitipongroo/mqtt-mock-sensor/issues).

@@ -9,6 +9,8 @@
     },
     "files": [
         "index.js",
+        "clientManager.js",
+        "runner.js",
         "payloadGenerator.js",
         "shadowManager.js",
         "enrollmentHelper.js",

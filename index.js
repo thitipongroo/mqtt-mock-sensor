@@ -1,24 +1,17 @@
 #!/usr/bin/env node
 
 const { program } = require('commander');
-const mqtt = require('mqtt');
+const { exec } = require('child_process');
+const fs = require('fs');
 const { version, description } = require('./package.json');
-const { generatePayload } = require('./payloadGenerator');
-const { ShadowManager } = require('./shadowManager');
 const { enrollDevice } = require('./enrollmentHelper');
 const { CsvReplayer } = require('./csvReplayer');
 const { runWizard } = require('./wizardHelper');
-const fs = require('fs');
+const { ClientManager } = require('./clientManager');
+const { SimulationRunner, printCta } = require('./runner');
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const VALID_ANOMALY_TYPES = ['critical', 'warning', 'quality', 'out-of-bounds'];
-
-function printCta() {
-    console.log('⭐ Enjoying mqtt-mock-sensor? Star us on GitHub & consider Sponsoring!');
-    console.log(
-        '🚀 Want a Visual Web Dashboard with 100k scale? Join waitlist: https://pulseiot.io'
-    );
-}
 
 program
     .version(version)
@@ -103,7 +96,6 @@ async function main() {
         console.log('⚡ Simulate 100,000 IoT Sensors & Test Chaos Scenarios in Your Browser!');
         console.log('🌐 Opening waitlist in your browser: https://pulseiot-cloud.io\n');
 
-        const { exec } = require('child_process');
         const openCmd =
             process.platform === 'darwin'
                 ? 'open'
@@ -199,7 +191,7 @@ async function main() {
             : `mock-device-${String(index + 1).padStart(3, '0')}`;
     });
 
-    // 1. Dynamic Enrollment Bootstrap (Optional)
+    // Dynamic Enrollment Bootstrap (Optional)
     let runtimeUsername = options.username;
     let runtimePassword = options.password;
 
@@ -219,296 +211,34 @@ async function main() {
         }
     }
 
-    // 2. Concurrency & Runtime Loop
-    const tlsOptions = {};
-    if (options.ca) tlsOptions.ca = fs.readFileSync(options.ca);
-    if (options.cert) tlsOptions.cert = fs.readFileSync(options.cert);
-    if (options.key) tlsOptions.key = fs.readFileSync(options.key);
-    if (options.insecure) tlsOptions.rejectUnauthorized = false;
+    const clientManager = new ClientManager(options.broker, {
+        ...options,
+        runtimeUsername,
+        runtimePassword
+    });
 
-    const activeClients = [];
-    const activeIntervals = new Map();
-    const publishedCounts = new Map();
-    deviceList.forEach((d) => publishedCounts.set(d, 0));
+    const runner = new SimulationRunner({
+        options,
+        deviceList,
+        targetTopicTemplate,
+        effectiveSchemaVersion,
+        customTemplate,
+        csvReplayer,
+        clientManager
+    });
 
-    function shutdownAndExit(code = 0) {
-        activeIntervals.forEach((id) => clearInterval(id));
-        let remaining = activeClients.length;
-        if (remaining === 0) process.exit(code);
+    runner.start();
+}
 
-        activeClients.forEach((c) => {
-            c.end(false, () => {
-                remaining -= 1;
-                if (remaining <= 0) {
-                    console.log('🔌 Disconnected all MQTT clients. Goodbye!');
-                    process.exit(code);
-                }
-            });
-        });
-    }
-
-    function checkExitCondition() {
-        if (csvReplayer && options.replayLoop === false) {
-            const allRowsConsumed = deviceList.every((d) => !csvReplayer.hasMoreRows(d));
-            if (allRowsConsumed) {
-                console.log(
-                    `\n✅ Replayed all ${csvReplayer.getRowCount()} CSV row(s) successfully. Exiting.`
-                );
-                printCta();
-                console.log();
-                shutdownAndExit(0);
-                return;
-            }
-        }
-
-        if (!options.count) return;
-        const allDone = deviceList.every((d) => publishedCounts.get(d) >= options.count);
-        if (allDone) {
-            console.log(
-                `\n✅ Published ${options.count} message(s) per device successfully. Exiting.`
-            );
-            printCta();
-            console.log();
-            shutdownAndExit(0);
-        }
-    }
-
-    function buildPayload(devId) {
-        if (csvReplayer) {
-            const rowPayload = csvReplayer.getNextPayload(devId);
-            if (rowPayload) return rowPayload;
-        }
-        return generatePayload(options.type, {
-            deviceId: devId,
-            template: customTemplate,
-            preset: options.preset,
-            anomalyRate: options.anomalyRate,
-            anomalyType: options.anomalyType,
-            schemaVersion: effectiveSchemaVersion,
-            orgId: options.orgId,
-            epochTimestamp: options.epochTimestamp
-        });
-    }
-
-    function getWillConfig(devId) {
-        if (!options.willTopic) return null;
-        const willTopic = options.willTopic
-            .replace(/\{deviceId\}/g, devId)
-            .replace(/\{orgId\}/g, options.orgId || '');
-        const defaultWillMsg = JSON.stringify({
-            status: 'OFFLINE',
-            deviceId: devId,
-            timestamp: new Date().toISOString()
-        });
-        const willPayload = (options.willMessage || defaultWillMsg)
-            .replace(/\{deviceId\}/g, devId)
-            .replace(/\{orgId\}/g, options.orgId || '');
-        return {
-            topic: willTopic,
-            payload: Buffer.from(willPayload),
-            qos: options.willQos !== undefined ? options.willQos : 0,
-            retain: Boolean(options.willRetain)
-        };
-    }
-
-    const useIndependentSockets = options.independentClients || options.shadow;
-
-    printCta();
-    console.log();
-    console.log(`🔌 Initializing MQTT simulation for ${deviceList.length} device(s)...`);
-    console.log(
-        `📋 Config: Schema v${effectiveSchemaVersion} | Preset: "${options.preset || options.type}" | Shadow: ${options.shadow ? 'ENABLED' : 'DISABLED'}`
-    );
-    if (useIndependentSockets) {
-        console.log('⚡ Mode: Independent Client Sockets (1 TCP socket per device)');
-    }
-    if (options.willTopic) {
-        console.log(
-            `📜 LWT: Enabled (Topic: "${options.willTopic}" | QoS: ${options.willQos || 0} | Retain: ${Boolean(options.willRetain)})`
-        );
-    }
-    if (csvReplayer) {
-        console.log(
-            `📁 Replay: Active ("${options.replay}" | ${csvReplayer.getRowCount()} rows | Loop: ${options.replayLoop !== false ? 'YES' : 'NO'})`
-        );
-    }
-    if (options.chaosJitter)
-        console.log(`⚡ Chaos: Jitter enabled (up to ${options.chaosJitter}ms)`);
-    if (options.chaosDisconnect)
-        console.log(`⚡ Chaos: Random ungraceful disconnect (${options.chaosDisconnect}%)`);
-
-    if (useIndependentSockets) {
-        deviceList.forEach((devId) => {
-            const connOpts = {
-                clientId: `mock_sensor_${devId}_${Math.random().toString(16).substring(2, 6)}`,
-                clean: true,
-                connectTimeout: 5000,
-                reconnectPeriod: 3000,
-                ...tlsOptions
-            };
-            if (runtimeUsername) connOpts.username = runtimeUsername;
-            if (runtimePassword) connOpts.password = runtimePassword;
-            const will = getWillConfig(devId);
-            if (will) connOpts.will = will;
-
-            const client = mqtt.connect(options.broker, connOpts);
-            activeClients.push(client);
-
-            client.on('connect', () => {
-                console.log(`✅ [${devId}] Connected to broker.`);
-
-                let currentIntervalMs = options.interval;
-                if (options.shadow) {
-                    const shadow = new ShadowManager(
-                        client,
-                        options.orgId,
-                        devId,
-                        { interval: currentIntervalMs },
-                        (delta) => {
-                            if (
-                                delta.samplingInterval &&
-                                delta.samplingInterval !== currentIntervalMs
-                            ) {
-                                console.log(
-                                    `🔄 [Runtime:${devId}] Adjusting publishing interval to ${delta.samplingInterval}ms`
-                                );
-                                currentIntervalMs = delta.samplingInterval;
-                                restartDeviceLoop(devId, client, currentIntervalMs);
-                            }
-                        }
-                    );
-                    shadow.init();
-                }
-
-                startDeviceLoop(devId, client, currentIntervalMs);
-            });
-
-            client.on('error', (err) => {
-                console.error(`⚠️ [${devId}] Connection error:`, err.message);
-            });
-        });
-    } else {
-        const connOpts = {
-            clientId: `mock_sensor_pool_${Math.random().toString(16).substring(2, 10)}`,
-            clean: true,
-            connectTimeout: 5000,
-            reconnectPeriod: 3000,
-            ...tlsOptions
-        };
-        if (runtimeUsername) connOpts.username = runtimeUsername;
-        if (runtimePassword) connOpts.password = runtimePassword;
-        const will = getWillConfig(deviceList[0] || 'mock-device');
-        if (will) connOpts.will = will;
-
-        const client = mqtt.connect(options.broker, connOpts);
-        activeClients.push(client);
-
-        client.on('connect', () => {
-            console.log(`✅ Connected to broker! Simulating ${deviceList.length} device(s)...`);
-            const intervalId = setInterval(async () => {
-                if (options.chaosDisconnect && Math.random() * 100 < options.chaosDisconnect) {
-                    console.warn('💥 [Chaos] Simulating sudden unclean network drop!');
-                    if (client.stream) client.stream.destroy();
-                    return;
-                }
-
-                for (const devId of deviceList) {
-                    const count = publishedCounts.get(devId);
-                    if (options.count && count >= options.count) continue;
-
-                    if (options.chaosJitter > 0) {
-                        const delay = Math.floor(Math.random() * options.chaosJitter);
-                        await new Promise((r) => setTimeout(r, delay));
-                    }
-
-                    const targetTopic = targetTopicTemplate
-                        .replace(/\{deviceId\}/g, devId)
-                        .replace(/\{orgId\}/g, options.orgId || '');
-
-                    const message = buildPayload(devId);
-
-                    client.publish(
-                        targetTopic,
-                        message,
-                        { qos: options.qos, retain: options.retain },
-                        (err) => {
-                            if (err) console.error(`❌ [${devId}] Publish error: ${err.message}`);
-                        }
-                    );
-                    console.log(`📤 [${devId}] -> ${message}`);
-
-                    publishedCounts.set(devId, count + 1);
-                }
-                checkExitCondition();
-            }, options.interval);
-
-            activeIntervals.set('pool', intervalId);
-        });
-
-        client.on('error', (err) => {
-            console.error('⚠️ Connection error:', err.message);
-        });
-    }
-
-    function startDeviceLoop(devId, client, intervalMs) {
-        const intervalId = setInterval(async () => {
-            const count = publishedCounts.get(devId);
-            if (options.count && count >= options.count) {
-                clearInterval(intervalId);
-                checkExitCondition();
-                return;
-            }
-
-            if (options.chaosDisconnect && Math.random() * 100 < options.chaosDisconnect) {
-                console.warn(`💥 [Chaos:${devId}] Simulating sudden unclean network drop!`);
-                if (client.stream) client.stream.destroy();
-                return;
-            }
-
-            if (options.chaosJitter > 0) {
-                const delay = Math.floor(Math.random() * options.chaosJitter);
-                await new Promise((r) => setTimeout(r, delay));
-            }
-
-            const targetTopic = targetTopicTemplate
-                .replace(/\{deviceId\}/g, devId)
-                .replace(/\{orgId\}/g, options.orgId || '');
-
-            const message = buildPayload(devId);
-
-            client.publish(
-                targetTopic,
-                message,
-                { qos: options.qos, retain: options.retain },
-                (err) => {
-                    if (err) console.error(`❌ [${devId}] Publish error: ${err.message}`);
-                }
-            );
-            console.log(`📤 [${devId}] -> ${message}`);
-
-            publishedCounts.set(devId, count + 1);
-            checkExitCondition();
-        }, intervalMs);
-
-        activeIntervals.set(devId, intervalId);
-    }
-
-    function restartDeviceLoop(devId, client, newIntervalMs) {
-        if (activeIntervals.has(devId)) {
-            clearInterval(activeIntervals.get(devId));
-        }
-        startDeviceLoop(devId, client, newIntervalMs);
-    }
-
-    process.on('SIGINT', () => {
-        console.log('\n🛑 Gracefully shutting down...');
-        printCta();
-        console.log();
-        shutdownAndExit(0);
+if (require.main === module) {
+    main().catch((err) => {
+        console.error('Fatal error:', err);
+        process.exit(1);
     });
 }
 
-main().catch((err) => {
-    console.error('Fatal error:', err);
-    process.exit(1);
-});
+module.exports = {
+    main,
+    program,
+    printCta
+};

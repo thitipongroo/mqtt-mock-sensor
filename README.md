@@ -69,6 +69,7 @@ mqtt-mock-sensor --help
 | --cert [file]            | string  | -                              | Path to client certificate (mTLS)                                       |
 | --key [file]             | string  | -                              | Path to client private key (mTLS)                                       |
 | --insecure               | boolean | false                          | Allow self-signed SSL/TLS certificates                                  |
+| --ui                     | boolean | false                          | Preview PulseIoT Visual Web Dashboard & join waitlist                   |
 
 ### 💡 Examples
 

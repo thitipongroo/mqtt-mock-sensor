@@ -78,11 +78,29 @@ program
         (v) => parseFloat(v),
         0
     )
+    .option('--ui', 'Preview PulseIoT Visual Web Dashboard & join waitlist', false)
     .parse(process.argv);
 
 const options = program.opts();
 
 async function main() {
+    if (options.ui) {
+        console.log('\n🚀 PulseIoT Visual Web Dashboard (Private Beta)');
+        console.log('⚡ Simulate 100,000 IoT Sensors & Test Chaos Scenarios in Your Browser!');
+        console.log('🌐 Opening waitlist in your browser: https://pulseiot-cloud.io\n');
+
+        const { exec } = require('child_process');
+        const openCmd =
+            process.platform === 'darwin'
+                ? 'open'
+                : process.platform === 'win32'
+                    ? 'start ""'
+                    : 'xdg-open';
+
+        exec(`${openCmd} "https://pulseiot.io"`, () => { });
+        return;
+    }
+
     if (![0, 1, 2].includes(options.qos)) {
         console.error('❌ Error: QoS must be 0, 1, or 2');
         process.exit(1);

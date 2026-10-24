@@ -6,6 +6,8 @@ const { version, description } = require('./package.json');
 const { generatePayload } = require('./payloadGenerator');
 const { ShadowManager } = require('./shadowManager');
 const { enrollDevice } = require('./enrollmentHelper');
+const { CsvReplayer } = require('./csvReplayer');
+const { runWizard } = require('./wizardHelper');
 const fs = require('fs');
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -79,6 +81,18 @@ program
         0
     )
     .option('--ui', 'Preview PulseIoT Visual Web Dashboard & join waitlist', false)
+    .option(
+        '--will-topic <topic>',
+        'MQTT Last Will and Testament (LWT) topic (supports {deviceId} and {orgId})'
+    )
+    .option(
+        '--will-message <message>',
+        'MQTT LWT message payload (default: {"status":"OFFLINE","deviceId":"{deviceId}"})'
+    )
+    .option('--will-qos <0|1|2>', 'MQTT LWT QoS level (0, 1, or 2)', (v) => parseInt(v, 10), 0)
+    .option('--will-retain', 'Set MQTT LWT retain flag', false)
+    .option('--replay <file>', 'Path to CSV file to replay real sensor telemetry')
+    .option('--no-replay-loop', 'Do not loop CSV replay after reaching EOF')
     .parse(process.argv);
 
 const options = program.opts();
@@ -94,15 +108,29 @@ async function main() {
             process.platform === 'darwin'
                 ? 'open'
                 : process.platform === 'win32'
-                    ? 'start ""'
-                    : 'xdg-open';
+                  ? 'start ""'
+                  : 'xdg-open';
 
-        exec(`${openCmd} "https://pulseiot.io"`, () => { });
+        exec(`${openCmd} "https://pulseiot-cloud.io"`, () => {});
         return;
+    }
+
+    const isInteractive = process.argv.slice(2).length === 0 && process.stdin.isTTY;
+    if (isInteractive) {
+        const wizardAnswers = await runWizard();
+        options.type = wizardAnswers.type;
+        if (wizardAnswers.preset) options.preset = wizardAnswers.preset;
+        options.broker = wizardAnswers.broker;
+        options.devices = wizardAnswers.devices;
     }
 
     if (![0, 1, 2].includes(options.qos)) {
         console.error('❌ Error: QoS must be 0, 1, or 2');
+        process.exit(1);
+    }
+
+    if (options.willTopic && ![0, 1, 2].includes(options.willQos)) {
+        console.error('❌ Error: --will-qos must be 0, 1, or 2');
         process.exit(1);
     }
 
@@ -151,6 +179,18 @@ async function main() {
         targetTopicTemplate = options.orgId
             ? `tenants/${options.orgId}/devices/{deviceId}/telemetry`
             : 'sensor/mock/data';
+    }
+
+    let csvReplayer = null;
+    if (options.replay) {
+        try {
+            csvReplayer = new CsvReplayer(options.replay, {
+                loop: options.replayLoop !== false
+            });
+        } catch (err) {
+            console.error(`❌ Failed to read CSV replay file: ${err.message}`);
+            process.exit(1);
+        }
     }
 
     const deviceList = Array.from({ length: options.devices }, (_, index) => {
@@ -208,6 +248,19 @@ async function main() {
     }
 
     function checkExitCondition() {
+        if (csvReplayer && options.replayLoop === false) {
+            const allRowsConsumed = deviceList.every((d) => !csvReplayer.hasMoreRows(d));
+            if (allRowsConsumed) {
+                console.log(
+                    `\n✅ Replayed all ${csvReplayer.getRowCount()} CSV row(s) successfully. Exiting.`
+                );
+                printCta();
+                console.log();
+                shutdownAndExit(0);
+                return;
+            }
+        }
+
         if (!options.count) return;
         const allDone = deviceList.every((d) => publishedCounts.get(d) >= options.count);
         if (allDone) {
@@ -221,6 +274,10 @@ async function main() {
     }
 
     function buildPayload(devId) {
+        if (csvReplayer) {
+            const rowPayload = csvReplayer.getNextPayload(devId);
+            if (rowPayload) return rowPayload;
+        }
         return generatePayload(options.type, {
             deviceId: devId,
             template: customTemplate,
@@ -233,6 +290,27 @@ async function main() {
         });
     }
 
+    function getWillConfig(devId) {
+        if (!options.willTopic) return null;
+        const willTopic = options.willTopic
+            .replace(/\{deviceId\}/g, devId)
+            .replace(/\{orgId\}/g, options.orgId || '');
+        const defaultWillMsg = JSON.stringify({
+            status: 'OFFLINE',
+            deviceId: devId,
+            timestamp: new Date().toISOString()
+        });
+        const willPayload = (options.willMessage || defaultWillMsg)
+            .replace(/\{deviceId\}/g, devId)
+            .replace(/\{orgId\}/g, options.orgId || '');
+        return {
+            topic: willTopic,
+            payload: Buffer.from(willPayload),
+            qos: options.willQos !== undefined ? options.willQos : 0,
+            retain: Boolean(options.willRetain)
+        };
+    }
+
     const useIndependentSockets = options.independentClients || options.shadow;
 
     printCta();
@@ -243,6 +321,16 @@ async function main() {
     );
     if (useIndependentSockets) {
         console.log('⚡ Mode: Independent Client Sockets (1 TCP socket per device)');
+    }
+    if (options.willTopic) {
+        console.log(
+            `📜 LWT: Enabled (Topic: "${options.willTopic}" | QoS: ${options.willQos || 0} | Retain: ${Boolean(options.willRetain)})`
+        );
+    }
+    if (csvReplayer) {
+        console.log(
+            `📁 Replay: Active ("${options.replay}" | ${csvReplayer.getRowCount()} rows | Loop: ${options.replayLoop !== false ? 'YES' : 'NO'})`
+        );
     }
     if (options.chaosJitter)
         console.log(`⚡ Chaos: Jitter enabled (up to ${options.chaosJitter}ms)`);
@@ -260,6 +348,8 @@ async function main() {
             };
             if (runtimeUsername) connOpts.username = runtimeUsername;
             if (runtimePassword) connOpts.password = runtimePassword;
+            const will = getWillConfig(devId);
+            if (will) connOpts.will = will;
 
             const client = mqtt.connect(options.broker, connOpts);
             activeClients.push(client);
@@ -307,6 +397,8 @@ async function main() {
         };
         if (runtimeUsername) connOpts.username = runtimeUsername;
         if (runtimePassword) connOpts.password = runtimePassword;
+        const will = getWillConfig(deviceList[0] || 'mock-device');
+        if (will) connOpts.will = will;
 
         const client = mqtt.connect(options.broker, connOpts);
         activeClients.push(client);

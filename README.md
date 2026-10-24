@@ -70,6 +70,12 @@ mqtt-mock-sensor --help
 | --key [file]             | string  | -                              | Path to client private key (mTLS)                                       |
 | --insecure               | boolean | false                          | Allow self-signed SSL/TLS certificates                                  |
 | --ui                     | boolean | false                          | Preview PulseIoT Visual Web Dashboard & join waitlist                   |
+| --will-topic [topic]     | string  | -                              | MQTT Last Will and Testament (LWT) topic (supports {deviceId})          |
+| --will-message [msg]     | string  | OFFLINE                        | Custom LWT payload message                                              |
+| --will-qos [0,1,2]       | number  | 0                              | MQTT LWT QoS level (0, 1, or 2)                                         |
+| --will-retain            | boolean | false                          | Enable MQTT LWT retain flag                                             |
+| --replay [path]          | string  | -                              | Path to CSV file to replay historical sensor telemetry                  |
+| --no-replay-loop         | boolean | false                          | Stop publishing after reaching the end of the CSV dataset               |
 
 ### 💡 Examples
 
@@ -152,6 +158,39 @@ mock-sensor --template ./template.json
 - {{randomInt}}: Random integer between 0 - 99
 
 - {{randomFloat}}: Random float with 2 decimal places (0.00 - 99.99)
+
+**Interactive Setup Wizard (Beginner-Friendly):**
+
+Run without any options in an interactive terminal to launch the setup wizard:
+
+```bash
+npx mqtt-mock-sensor
+```
+
+**MQTT Last Will and Testament (LWT) for Chaos Testing:**
+
+Ensure your broker and alert pipeline detect ungraceful disconnects with an automated LWT message:
+
+```bash
+mock-sensor \
+  -b mqtts://broker.hivemq.com:8883 \
+  --will-topic "tenants/{orgId}/devices/{deviceId}/status" \
+  --will-message '{"status":"OFFLINE","event":"UNEXPECTED_DISCONNECT"}' \
+  --will-qos 1 \
+  --will-retain \
+  --chaos-disconnect 10
+```
+
+**Historical Sensor Dataset Replay (CSV):**
+
+Replay field sensor logs from CSV files at real-time intervals:
+
+```bash
+mock-sensor \
+  --replay ./factory_readings.csv \
+  --topic "factory/telemetry/{deviceId}" \
+  -i 1000
+```
 
 ### 🛡️ Integration Guide (Example - Sentinel IoT Platform )
 
@@ -271,11 +310,11 @@ If your organization benefits from `mqtt-mock-sensor`, consider becoming a corpo
 
 ### 🏢 Sponsorship Tiers
 
-| Tier | Sponsor | Benefits & Visibility |
-| :--- | :---: | :--- |
+| Tier                                  |                                                                                        Sponsor                                                                                        | Benefits & Visibility                                                                                                                                                             |
+| :------------------------------------ | :-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------: | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **🥇 Platinum Sponsor**<br/>`$250/mo` | <a href="https://github.com/sponsors/thitipongroo"><img src="https://via.placeholder.com/260x80/1a1e24/ea4aaa?text=+Your+Company+Logo+" alt="Platinum Sponsor Logo" width="220"/></a> | • **Large Logo** prominently displayed at top of README & documentation<br/>• Direct backlink to your website/product<br/>• Priority issue triage & feature request consideration |
-| **🥈 Silver Sponsor**<br/>`$100/mo` | <a href="https://github.com/sponsors/thitipongroo"><img src="https://via.placeholder.com/200x60/1a1e24/ea4aaa?text=+Your+Logo+" alt="Silver Sponsor Logo" width="160"/></a> | • **Medium Logo** featured in README & release announcements<br/>• Backlink to your homepage or product page |
-| **🥉 Bronze / Backer**<br/>`$25/mo` | <a href="https://github.com/sponsors/thitipongroo"><img src="https://via.placeholder.com/140x45/1a1e24/ea4aaa?text=+Your+Name+" alt="Backer" width="110"/></a> | • Recognition in the Backers & Contributors roster<br/>• Profile mention in release notes |
+| **🥈 Silver Sponsor**<br/>`$100/mo`   |      <a href="https://github.com/sponsors/thitipongroo"><img src="https://via.placeholder.com/200x60/1a1e24/ea4aaa?text=+Your+Logo+" alt="Silver Sponsor Logo" width="160"/></a>      | • **Medium Logo** featured in README & release announcements<br/>• Backlink to your homepage or product page                                                                      |
+| **🥉 Bronze / Backer**<br/>`$25/mo`   |            <a href="https://github.com/sponsors/thitipongroo"><img src="https://via.placeholder.com/140x45/1a1e24/ea4aaa?text=+Your+Name+" alt="Backer" width="110"/></a>             | • Recognition in the Backers & Contributors roster<br/>• Profile mention in release notes                                                                                         |
 
 <p align="center">
   <a href="https://github.com/sponsors/thitipongroo">

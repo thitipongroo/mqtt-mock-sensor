@@ -2,10 +2,12 @@ const { generatePayload } = require('./payloadGenerator');
 const { ShadowManager } = require('./shadowManager');
 
 function printCta() {
-    console.log('⭐ Enjoying mqtt-mock-sensor? Star us on GitHub & consider Sponsoring!');
-    console.log(
-        '🚀 Want a Visual Web Dashboard with 100k scale? Join waitlist: https://pulseiot-cloud.com'
-    );
+    console.log('\n┌────────────────────────────────────────────────────────────────────────┐');
+    console.log('│ 🚀 Elevate Your Fleet with Pulse SensorLab (Visual Web Studio)        │');
+    console.log('│    Visual Telemetry Designer • Dynamic Chaos Injections • 100k Sockets │');
+    console.log('│    👉 Join Free Cloud Alpha: https://pulseiot-cloud.com/sensorlab      │');
+    console.log('│    ⭐ Star & Sponsor on GitHub: github.com/thitipongroo/mqtt-mock-sensor │');
+    console.log('└────────────────────────────────────────────────────────────────────────┘\n');
 }
 
 class SimulationRunner {

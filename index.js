@@ -100,10 +100,10 @@ async function main() {
             process.platform === 'darwin'
                 ? 'open'
                 : process.platform === 'win32'
-                    ? 'start ""'
-                    : 'xdg-open';
+                  ? 'start ""'
+                  : 'xdg-open';
 
-        exec(`${openCmd} "https://pulseiot-cloud.com"`, () => { });
+        exec(`${openCmd} "https://pulseiot-cloud.com"`, () => {});
         return;
     }
 

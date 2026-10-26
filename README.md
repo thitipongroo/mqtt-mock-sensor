@@ -7,6 +7,16 @@
 
 A zero-config, feature-rich CLI tool to generate and stream realistic mock IoT telemetry data to any MQTT broker. Built to accelerate IoT backend development, cloud data pipelines, and AI/ML anomaly detection testing without physical hardware.
 
+---
+
+### 🎨 Prefer a Visual Web Studio?
+Design your sensor fleets visually, preview real-time waveform oscillations, and generate ready-to-run CLI commands in one click using **Pulse SensorLab**:
+
+👉 **[Open Pulse SensorLab Web Studio](https://sensorlab.pulseiot-cloud.com)**
+*(Free open-access visual companion hosted on PulseIoT Cloud)*
+
+---
+
 ## 📦 Installation & Quick Start
 
 Run instantly with `npx` (No installation needed):

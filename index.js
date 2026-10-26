@@ -39,7 +39,7 @@ program
     .option('--epoch-timestamp', 'Force numeric Unix epoch milliseconds timestamp', false)
     .option(
         '--preset <name>',
-        'Sentinel domain preset: sentinel-env, sentinel-industrial, sentinel-air'
+        'Domain preset: industrial, env, air, gps (or sentinel-env, sentinel-industrial, sentinel-air)'
     )
     .option(
         '--anomaly-rate <percent>',
@@ -60,7 +60,7 @@ program
     .option('--shadow', 'Enable Bi-directional Device Shadow synchronization', false)
     .option(
         '--enroll-url <url>',
-        'Sentinel REST enrollment URL (e.g. http://localhost:8080/api/v1/devices/enroll)'
+        'REST device enrollment URL (e.g. http://localhost:8080/api/v1/devices/enroll)'
     )
     .option('--enroll-token <token>', 'Single-use device enrollment bootstrap token')
     .option(
@@ -75,7 +75,7 @@ program
         (v) => parseFloat(v),
         0
     )
-    .option('--ui', 'Preview PulseIoT Visual Web Dashboard & join waitlist', false)
+    .option('--ui', 'Preview Pulse SensorLab Visual Web Studio in browser', false)
     .option(
         '--will-topic <topic>',
         'MQTT Last Will and Testament (LWT) topic (supports {deviceId} and {orgId})'
@@ -95,9 +95,11 @@ async function main(customOptions) {
     }
     const options = customOptions ? { ...program.opts(), ...customOptions } : program.opts();
     if (options.ui) {
-        console.log('\n🚀 PulseIoT Visual Web Dashboard (Private Beta)');
-        console.log('⚡ Simulate 100,000 IoT Sensors & Test Chaos Scenarios in Your Browser!');
-        console.log('🌐 Opening waitlist in your browser: https://pulseiot-cloud.com\n');
+        console.log('\n🚀 Pulse SensorLab Visual Web Studio');
+        console.log('⚡ Design sensor fleets visually and test chaos scenarios in your browser!');
+        console.log(
+            '🌐 Opening Web Studio in your browser: https://sensorlab.pulseiot-cloud.com\n'
+        );
 
         const openCmd =
             process.platform === 'darwin'
@@ -106,7 +108,7 @@ async function main(customOptions) {
                   ? 'start ""'
                   : 'xdg-open';
 
-        exec(`${openCmd} "https://pulseiot-cloud.com"`, () => {});
+        exec(`${openCmd} "https://sensorlab.pulseiot-cloud.com"`, () => {});
         return;
     }
 

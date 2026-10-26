@@ -50,50 +50,58 @@ mqtt-mock-sensor --help
 
 ## ⚙️ Command-Line Options
 
-| Option                   | Type    | Default                        | Description                                                             |
-| ------------------------ | ------- | ------------------------------ | ----------------------------------------------------------------------- |
-| -b, --broker [url]       | string  | mqtts://broker.hivemq.com:8883 | MQTT Broker URL (Supports mqtt://, mqtts://, ws://, wss://)             |
-| -t, --topic [topic]      | string  | sensor/mock/data               | Target topic. Supports {deviceId} placeholder for dynamic routing       |
-| -i, --interval [ms]      | number  | 2000                           | Stream interval between messages in milliseconds                        |
-| --type < type >          | string  | env                            | Sensor telemetry preset: env, gps, power                                |
-| -d, --device-id [id]     | string  | Auto-generated                 | Static device identifier for session                                    |
-| --devices [count]        | number  | 1                              | Number of concurrent devices to simulate                                |
-| --schema-version [1,2]   | number  | 1                              | Telemetry schema version: 1 (legacy flat) or 2 (Sentinel rich readings) |
-| --org-id [uuid]          | string  | optional                       | Organization/Tenant UUID for multi-tenant isolation                     |
-| --epoch-timestamp        | boolean | false                          | Force numeric Unix epoch milliseconds timestamp (Date.now())            |
-| --preset [name]          | string  | optional                       | Domain presets: [domain]-env, [domain]-industrial, [domain]-air         |
-| -q, --qos [0,1,2]        | number  | 0                              | MQTT Quality of Service level                                           |
-| -r, --retain             | boolean | false                          | Enable MQTT retain message flag                                         |
-| --count [n]              | number  | Unlimited                      | Automatically stop and exit after publishing N messages per device      |
-| --anomaly-rate [pct]     | number  | 0                              | Percentage of messages to inject extreme metric anomalies (0-100)       |
-| --anomaly-type [type]    | string  | critical                       | Anomaly type: critical, warning, quality, or out-of-bounds.             |
-| --independent-clients    | boolean | false                          | Spawn separate TCP/TLS client sockets per device (true concurrency)     |
-| --shadow                 | boolean | false                          | Enable bi-directional AWS IoT-style Device Shadow synchronization.      |
-| --enroll-url [url]       | string  | optional                       | REST API endpoint to bootstrap dynamic MQTT credentials                 |
-| --enroll-token [token]   | string  | optional                       | Single-use device enrollment bootstrap token                            |
-| --chaos-jitter [ms].     | number  | 0                              | Inject random network latency up to N ms before publishing              |
-| --chaos-disconnect [pct] | number  | 0                              | Simulate sudden ungraceful TCP network drops (0 - 100%)                 |
-| --template [path]        | string  | -                              | Path to a custom JSON template file                                     |
-| -u, --username [user]    | string  | -                              | Broker authentication username                                          |
-| -p, --password [pass]    | string  | -                              | Broker authentication password                                          |
-| --ca [file]              | string  | -                              | Path to custom Root CA certificate                                      |
-| --cert [file]            | string  | -                              | Path to client certificate (mTLS)                                       |
-| --key [file]             | string  | -                              | Path to client private key (mTLS)                                       |
-| --insecure               | boolean | false                          | Allow self-signed SSL/TLS certificates                                  |
-| --ui                     | boolean | false                          | Preview PulseIoT Visual Web Dashboard & join waitlist                   |
-| --will-topic [topic]     | string  | -                              | MQTT Last Will and Testament (LWT) topic (supports {deviceId})          |
-| --will-message [msg]     | string  | OFFLINE                        | Custom LWT payload message                                              |
-| --will-qos [0,1,2]       | number  | 0                              | MQTT LWT QoS level (0, 1, or 2)                                         |
-| --will-retain            | boolean | false                          | Enable MQTT LWT retain flag                                             |
-| --replay [path]          | string  | -                              | Path to CSV file to replay historical sensor telemetry                  |
-| --no-replay-loop         | boolean | false                          | Stop publishing after reaching the end of the CSV dataset               |
+| Option                   | Type    | Default                        | Description                                                         |
+| ------------------------ | ------- | ------------------------------ | ------------------------------------------------------------------- |
+| -b, --broker [url]       | string  | mqtts://broker.hivemq.com:8883 | MQTT Broker URL (Supports mqtt://, mqtts://, ws://, wss://)         |
+| -t, --topic [topic]      | string  | sensor/mock/data               | Target topic. Supports {deviceId} placeholder for dynamic routing   |
+| -i, --interval [ms]      | number  | 2000                           | Stream interval between messages in milliseconds                    |
+| --type < type >          | string  | env                            | Sensor telemetry preset: env, gps, power                            |
+| -d, --device-id [id]     | string  | Auto-generated                 | Static device identifier for session                                |
+| --devices [count]        | number  | 1                              | Number of concurrent devices to simulate                            |
+| --schema-version [1,2]   | number  | 1                              | Telemetry schema version: 1 (legacy flat) or 2 (rich readings)      |
+| --org-id [uuid]          | string  | optional                       | Organization/Tenant UUID for multi-tenant isolation                 |
+| --epoch-timestamp        | boolean | false                          | Force numeric Unix epoch milliseconds timestamp (Date.now())        |
+| --preset [name]          | string  | optional                       | Domain presets: industrial, env, air, gps (or sentinel-*)           |
+| -q, --qos [0,1,2]        | number  | 0                              | MQTT Quality of Service level                                       |
+| -r, --retain             | boolean | false                          | Enable MQTT retain message flag                                     |
+| --count [n]              | number  | Unlimited                      | Automatically stop and exit after publishing N messages per device  |
+| --anomaly-rate [pct]     | number  | 0                              | Percentage of messages to inject extreme metric anomalies (0-100)   |
+| --anomaly-type [type]    | string  | critical                       | Anomaly type: critical, warning, quality, or out-of-bounds.         |
+| --independent-clients    | boolean | false                          | Spawn separate TCP/TLS client sockets per device (true concurrency) |
+| --shadow                 | boolean | false                          | Enable bi-directional AWS IoT-style Device Shadow synchronization.  |
+| --enroll-url [url]       | string  | optional                       | REST API endpoint to bootstrap dynamic MQTT credentials             |
+| --enroll-token [token]   | string  | optional                       | Single-use device enrollment bootstrap token                        |
+| --chaos-jitter [ms].     | number  | 0                              | Inject random network latency up to N ms before publishing          |
+| --chaos-disconnect [pct] | number  | 0                              | Simulate sudden ungraceful TCP network drops (0 - 100%)             |
+| --template [path]        | string  | -                              | Path to a custom JSON template file                                 |
+| -u, --username [user]    | string  | -                              | Broker authentication username                                      |
+| -p, --password [pass]    | string  | -                              | Broker authentication password                                      |
+| --ca [file]              | string  | -                              | Path to custom Root CA certificate                                  |
+| --cert [file]            | string  | -                              | Path to client certificate (mTLS)                                   |
+| --key [file]             | string  | -                              | Path to client private key (mTLS)                                   |
+| --insecure               | boolean | false                          | Allow self-signed SSL/TLS certificates                              |
+| --ui                     | boolean | false                          | Preview Pulse SensorLab Visual Web Studio & scenario designer       |
+| --will-topic [topic]     | string  | -                              | MQTT Last Will and Testament (LWT) topic (supports {deviceId})      |
+| --will-message [msg]     | string  | OFFLINE                        | Custom LWT payload message                                          |
+| --will-qos [0,1,2]       | number  | 0                              | MQTT LWT QoS level (0, 1, or 2)                                     |
+| --will-retain            | boolean | false                          | Enable MQTT LWT retain flag                                         |
+| --replay [path]          | string  | -                              | Path to CSV file to replay historical sensor telemetry              |
+| --no-replay-loop         | boolean | false                          | Stop publishing after reaching the end of the CSV dataset           |
 
 ### 💡 Examples
 
-**Connect with Username and Password:**
+**Connect to any local or remote MQTT broker:**
 
 ```bash
-mock-sensor -b mqtt://secure-broker.com -u "admin" -p "secret123"
+# Connect to any local or remote MQTT broker
+npx mqtt-mock-sensor -b mqtt://localhost:1883 --devices 10 -i 1000
+```
+
+**Connect to an authenticated secure broker:**
+
+```bash
+# Connect to an authenticated secure broker
+npx mqtt-mock-sensor -b mqtts://broker.example.com:8883 -u my-user -p my-password --preset industrial
 ```
 
 **Generate GPS Data:**

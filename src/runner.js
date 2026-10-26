@@ -5,7 +5,7 @@ function printCta() {
     console.log('\n┌────────────────────────────────────────────────────────────────────────┐');
     console.log('│ 🚀 Elevate Your Fleet with Pulse SensorLab (Visual Web Studio)        │');
     console.log('│    Visual Telemetry Designer • Dynamic Chaos Injections • 100k Sockets │');
-    console.log('│    👉 Join Free Cloud Alpha: https://pulseiot-cloud.com/sensorlab      │');
+    console.log('│    👉 Free Visual Web Studio: https://sensorlab.pulseiot-cloud.com     │');
     console.log('│    ⭐ Star & Sponsor on GitHub: github.com/thitipongroo/mqtt-mock-sensor │');
     console.log('└────────────────────────────────────────────────────────────────────────┘\n');
 }

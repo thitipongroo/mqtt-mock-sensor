@@ -8,10 +8,21 @@ const fs = require('fs');
  */
 function buildTlsOptions(options = {}) {
     const tlsOptions = {};
-    if (options.ca) tlsOptions.ca = fs.readFileSync(options.ca);
-    if (options.cert) tlsOptions.cert = fs.readFileSync(options.cert);
-    if (options.key) tlsOptions.key = fs.readFileSync(options.key);
+    if (options.ca) {
+        tlsOptions.ca = Buffer.isBuffer(options.ca) ? options.ca : fs.readFileSync(options.ca);
+    }
+    if (options.cert) {
+        tlsOptions.cert = Buffer.isBuffer(options.cert)
+            ? options.cert
+            : fs.readFileSync(options.cert);
+    }
+    if (options.key) {
+        tlsOptions.key = Buffer.isBuffer(options.key) ? options.key : fs.readFileSync(options.key);
+    }
     if (options.insecure) tlsOptions.rejectUnauthorized = false;
+    if (options.rejectUnauthorized !== undefined) {
+        tlsOptions.rejectUnauthorized = options.rejectUnauthorized;
+    }
     return tlsOptions;
 }
 

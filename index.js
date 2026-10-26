@@ -9,6 +9,8 @@ const { CsvReplayer } = require('./src/csvReplayer');
 const { runWizard } = require('./src/wizardHelper');
 const { ClientManager } = require('./src/clientManager');
 const { SimulationRunner, printCta } = require('./src/runner');
+const { generatePayload } = require('./src/payloadGenerator');
+const { ShadowManager } = require('./src/shadowManager');
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const VALID_ANOMALY_TYPES = ['critical', 'warning', 'quality', 'out-of-bounds'];
@@ -85,12 +87,13 @@ program
     .option('--will-qos <0|1|2>', 'MQTT LWT QoS level (0, 1, or 2)', (v) => parseInt(v, 10), 0)
     .option('--will-retain', 'Set MQTT LWT retain flag', false)
     .option('--replay <file>', 'Path to CSV file to replay real sensor telemetry')
-    .option('--no-replay-loop', 'Do not loop CSV replay after reaching EOF')
-    .parse(process.argv);
+    .option('--no-replay-loop', 'Do not loop CSV replay after reaching EOF');
 
-const options = program.opts();
-
-async function main() {
+async function main(customOptions) {
+    if (!customOptions && (!program.rawArgs || program.rawArgs.length === 0)) {
+        program.parse(process.argv);
+    }
+    const options = customOptions ? { ...program.opts(), ...customOptions } : program.opts();
     if (options.ui) {
         console.log('\n🚀 PulseIoT Visual Web Dashboard (Private Beta)');
         console.log('⚡ Simulate 100,000 IoT Sensors & Test Chaos Scenarios in Your Browser!');
@@ -231,6 +234,7 @@ async function main() {
 }
 
 if (require.main === module) {
+    program.parse(process.argv);
     main().catch((err) => {
         console.error('Fatal error:', err);
         process.exit(1);
@@ -240,5 +244,12 @@ if (require.main === module) {
 module.exports = {
     main,
     program,
-    printCta
+    printCta,
+    generatePayload,
+    SimulationRunner,
+    ClientManager,
+    CsvReplayer,
+    ShadowManager,
+    enrollDevice,
+    runWizard
 };

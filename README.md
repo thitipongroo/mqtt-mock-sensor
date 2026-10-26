@@ -10,10 +10,11 @@ A zero-config, feature-rich CLI tool to generate and stream realistic mock IoT t
 ---
 
 ### 🎨 Prefer a Visual Web Studio?
+
 Design your sensor fleets visually, preview real-time waveform oscillations, and generate ready-to-run CLI commands in one click using **Pulse SensorLab**:
 
 👉 **[Open Pulse SensorLab Web Studio](https://sensorlab.pulseiot-cloud.com)**
-*(Free open-access visual companion hosted on PulseIoT Cloud)*
+_(Free open-access visual companion hosted on PulseIoT Cloud)_
 
 ---
 
@@ -336,12 +337,24 @@ If your organization benefits from `mqtt-mock-sensor`, consider becoming a corpo
 
 ## 🏗️ Architecture & Project Structure
 
+---
+
+### ⚡ Powered by PulseIoT Ecosystem
+
+`mqtt-mock-sensor` is the official open-source telemetry engine powering the **Pulse SensorLab Cloud Runner**.
+
+- Use the **[Free CLI](https://www.npmjs.com/package/mqtt-mock-sensor)** for local mocking and zero-config testing.
+- Use **[Pulse SensorLab Web Studio](https://sensorlab.pulseiot-cloud.com)** for visual scenario design, real-time wave canvas, and fleet deployment.
+
+---
+
 The codebase adopts a **Pragmatic Modular Architecture** designed for clarity, testability, and zero-overhead performance:
 
 ```text
 mqtt-mock-sensor/
-├── index.js                     # CLI Entry Point & Options Controller
+├── index.js                     # CLI Entry Point & Headless Engine Exports
 ├── src/                         # Core runtime modules
+│   ├── index.js                 # Programmatic module exports & headless API
 │   ├── clientManager.js         # MQTT socket connections, TLS/mTLS, LWT
 │   ├── runner.js                # Simulation lifecycle, interval loops, chaos timing
 │   ├── payloadGenerator.js      # Telemetry schemas (v1/v2), anomalies, presets
@@ -357,6 +370,21 @@ mqtt-mock-sensor/
 │   └── wizardHelper.test.js
 ├── DockerFile                   # Minimal production container build
 └── package.json
+```
+
+### 💻 Programmatic Headless Usage
+
+`mqtt-mock-sensor` exports headless telemetry generation and simulation components for use in custom Node.js services or test suites:
+
+```javascript
+const { generatePayload, SimulationRunner } = require('mqtt-mock-sensor');
+
+// Generate schema v2 telemetry programmatically
+const payload = generatePayload('env', {
+    deviceId: 'sensor-101',
+    schemaVersion: 2
+});
+console.log(payload);
 ```
 
 ## 🧪 Development & Testing

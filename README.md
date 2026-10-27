@@ -356,6 +356,13 @@ If your organization benefits from `mqtt-mock-sensor`, consider becoming a corpo
 
 ---
 
+### 🌐 Need Hosted Cloud Scaling?
+
+While `mqtt-mock-sensor` is 100% free for local and single-node testing, teams requiring hosted cloud runners (up to 10,000 concurrent devices) and visual fleet controls can explore:
+👉 **[Pulse SensorLab Pro & Team Cloud Plans](https://pulseiot-cloud.com/#pricing)**
+
+---
+
 The codebase adopts a **Pragmatic Modular Architecture** designed for clarity, testability, and zero-overhead performance:
 
 ```text

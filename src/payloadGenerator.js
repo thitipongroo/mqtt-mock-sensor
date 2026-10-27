@@ -67,10 +67,11 @@ function generateIndustrialReadings(anomalyMode, quality) {
         current = 18.0;
         power = parseFloat((voltage * current).toFixed(1));
         vibration = 9.5;
-        temp = 92.0;
+        temp = randomInRange(360.0, 395.0); // Thermal Overheat (> 350°C) triggering emergency alerts
     } else if (anomalyMode === 'out-of-bounds') {
         vibration = 150.0; // ละเมิด Physical Bounds
         voltage = 1200.0;
+        temp = 550.0;
     }
 
     return {

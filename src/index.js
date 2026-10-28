@@ -1,3 +1,6 @@
+// @ts-check
+'use strict';
+
 const {
     generatePayload,
     sanitizeObject,
@@ -11,6 +14,7 @@ const {
     validateBrokerUrl,
     isLoopbackOrLinkLocal
 } = require('./clientManager');
+const { DriftCompensatedPacer } = require('./scheduler/pacer');
 const { CsvReplayer } = require('./csvReplayer');
 const { ShadowManager } = require('./shadowManager');
 const { enrollDevice } = require('./enrollmentHelper');
@@ -20,6 +24,7 @@ module.exports = {
     generatePayload,
     SimulationRunner,
     PreGeneratedPayloadBuffer,
+    DriftCompensatedPacer,
     ClientManager,
     PacketQueue,
     CsvReplayer,

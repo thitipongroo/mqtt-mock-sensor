@@ -1,7 +1,13 @@
+// @ts-check
+'use strict';
+
 const readline = require('readline');
 
 /**
  * Creates a readline prompt promise.
+ * @param {readline.Interface} rl
+ * @param {string} questionText
+ * @returns {Promise<string>}
  */
 function ask(rl, questionText) {
     return new Promise((resolve) => {
@@ -17,6 +23,8 @@ function ask(rl, questionText) {
 
 /**
  * Parses user input for sensor type choice.
+ * @param {string} input
+ * @returns {{ type: string, preset: string|null }}
  */
 function parseSensorChoice(input) {
     const val = input.toLowerCase();
@@ -26,12 +34,14 @@ function parseSensorChoice(input) {
     if (val === '3' || val === 'gps' || val === 'vehicle') {
         return { type: 'gps', preset: null };
     }
-    // Default 1: env
     return { type: 'env', preset: 'sentinel-env' };
 }
 
 /**
  * Parses user input for broker choice.
+ * @param {readline.Interface} rl
+ * @param {string} input
+ * @returns {Promise<string>}
  */
 async function parseBrokerChoice(rl, input) {
     if (input === '2' || input.toLowerCase() === 'custom') {
@@ -41,23 +51,27 @@ async function parseBrokerChoice(rl, input) {
         );
         return customUrl || 'mqtt://localhost:1883';
     }
-    // Default 1: HiveMQ public sandbox
     return 'mqtts://broker.hivemq.com:8883';
 }
 
 /**
  * Parses device count input.
+ * @param {string} input
+ * @returns {number}
  */
 function parseDeviceCount(input) {
     const parsed = parseInt(input, 10);
     if (!isNaN(parsed) && parsed > 0) {
-        return Math.min(parsed, 1000); // safety cap for wizard
+        return Math.min(parsed, 1000);
     }
     return 1;
 }
 
 /**
  * Interactive Setup Wizard for beginners.
+ * @param {any} [inputStream=process.stdin]
+ * @param {any} [outputStream=process.stdout]
+ * @returns {Promise<{ type: string, preset: string|null, broker: string, devices: number }>}
  */
 async function runWizard(inputStream = process.stdin, outputStream = process.stdout) {
     const rl = readline.createInterface({

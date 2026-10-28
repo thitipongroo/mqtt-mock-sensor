@@ -1,7 +1,18 @@
+// @ts-check
+'use strict';
+
 /**
  * shadowManager.js
+ * Bi-directional Device Shadow synchronization manager
  */
 class ShadowManager {
+    /**
+     * @param {any} client - MQTT Client instance
+     * @param {string} orgId - Tenant/Organization UUID
+     * @param {string} deviceId - Simulated Device ID
+     * @param {Record<string, any>} [initialConfig={}] - Initial device state configuration
+     * @param {((delta: Record<string, any>) => void)|null} [onConfigChange=null] - Delta update callback
+     */
     constructor(client, orgId, deviceId, initialConfig = {}, onConfigChange = null) {
         this.client = client;
         this.orgId = orgId;
@@ -22,9 +33,12 @@ class ShadowManager {
         };
     }
 
+    /**
+     * Subscribes to shadow delta, accepted, and rejected topics and syncs initial state.
+     */
     init() {
         const topics = [this.deltaTopic, this.acceptedTopic, this.rejectedTopic];
-        this.client.subscribe(topics, (err) => {
+        this.client.subscribe(topics, (/** @type {Error|null} */ err) => {
             if (err) {
                 console.error(`❌ [Shadow:${this.deviceId}] Subscription error:`, err.message);
                 return;
@@ -35,12 +49,12 @@ class ShadowManager {
             this.publishReportedState(this.reportedState, `init-${Date.now()}`);
         });
 
-        // manage recieve message from Broker
-        this.client.on('message', (topic, message) => {
+        // Manage received messages from Broker
+        this.client.on('message', (/** @type {string} */ topic, /** @type {Buffer} */ message) => {
             if (topic === this.deltaTopic) {
                 this.handleDelta(message.toString());
             } else if (topic === this.acceptedTopic) {
-                // Log debug accepted
+                // Debug log if accepted
             } else if (topic === this.rejectedTopic) {
                 console.error(
                     `⚠️ [Shadow:${this.deviceId}] Shadow update rejected:`,
@@ -50,6 +64,11 @@ class ShadowManager {
         });
     }
 
+    /**
+     * Publishes a reported state patch to the shadow update topic.
+     * @param {Record<string, any>} reportedPatch
+     * @param {string|null} [clientToken=null]
+     */
     publishReportedState(reportedPatch, clientToken = null) {
         const payload = {
             state: {
@@ -58,18 +77,27 @@ class ShadowManager {
             clientToken: clientToken || `token-${Date.now()}`
         };
 
-        this.client.publish(this.updateTopic, JSON.stringify(payload), { qos: 1 }, (err) => {
-            if (err) {
-                console.error(
-                    `❌ [Shadow:${this.deviceId}] Failed to publish reported state:`,
-                    err.message
-                );
-            } else {
-                console.log(`📤 [Shadow:${this.deviceId}] Reported state synced.`);
+        this.client.publish(
+            this.updateTopic,
+            JSON.stringify(payload),
+            { qos: 1 },
+            (/** @type {Error|null} */ err) => {
+                if (err) {
+                    console.error(
+                        `❌ [Shadow:${this.deviceId}] Failed to publish reported state:`,
+                        err.message
+                    );
+                } else {
+                    console.log(`📤 [Shadow:${this.deviceId}] Reported state synced.`);
+                }
             }
-        });
+        );
     }
 
+    /**
+     * Handles incoming delta updates and notifies callbacks.
+     * @param {string} rawMessage
+     */
     handleDelta(rawMessage) {
         try {
             const data = JSON.parse(rawMessage);
@@ -95,17 +123,28 @@ class ShadowManager {
                 clientToken: `ack-v${version}-${Date.now()}`
             };
 
-            this.client.publish(this.updateTopic, JSON.stringify(ackPayload), { qos: 1 }, (err) => {
-                if (err) {
-                    console.error(`❌ [Shadow:${this.deviceId}] Failed to ack delta:`, err.message);
-                } else {
-                    console.log(
-                        `✅ [Shadow:${this.deviceId}] Reconciled & acknowledged delta (v${version})`
-                    );
+            this.client.publish(
+                this.updateTopic,
+                JSON.stringify(ackPayload),
+                { qos: 1 },
+                (/** @type {Error|null} */ err) => {
+                    if (err) {
+                        console.error(
+                            `❌ [Shadow:${this.deviceId}] Failed to ack delta:`,
+                            err.message
+                        );
+                    } else {
+                        console.log(
+                            `✅ [Shadow:${this.deviceId}] Reconciled & acknowledged delta (v${version})`
+                        );
+                    }
                 }
-            });
+            );
         } catch (e) {
-            console.error(`⚠️ [Shadow:${this.deviceId}] Malformed delta message:`, e.message);
+            console.error(
+                `⚠️ [Shadow:${this.deviceId}] Malformed delta message:`,
+                /** @type {Error} */ (e).message
+            );
         }
     }
 }

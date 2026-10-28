@@ -3,13 +3,15 @@
     "version": "2.1.1",
     "description": "A CLI tool to mock IoT sensor data and publish to an MQTT broker",
     "main": "index.js",
+    "types": "types/index.d.ts",
     "bin": {
         "mock-sensor": "index.js",
         "mqtt-mock-sensor": "index.js"
     },
     "files": [
         "index.js",
-        "src"
+        "src",
+        "types"
     ],
     "repository": {
         "type": "git",

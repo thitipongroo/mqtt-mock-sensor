@@ -1,3 +1,6 @@
+// @ts-check
+'use strict';
+
 /**
  * enrollmentHelper.js
  * Enroll Device via REST API
@@ -7,6 +10,13 @@ const http = require('http');
 const https = require('https');
 const { URL } = require('url');
 
+/**
+ * Enrolls a device dynamically via REST API.
+ * @param {string} enrollUrl
+ * @param {string} deviceId
+ * @param {string} token
+ * @returns {Promise<{ username: string, password: string }>}
+ */
 async function enrollDevice(enrollUrl, deviceId, token) {
     return new Promise((resolve, reject) => {
         const parsedUrl = new URL(enrollUrl);
@@ -40,7 +50,7 @@ async function enrollDevice(enrollUrl, deviceId, token) {
                 body += chunk;
             });
             res.on('end', () => {
-                if (res.statusCode >= 200 && res.statusCode < 300) {
+                if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
                     let password = body.trim();
                     try {
                         const parsed = JSON.parse(body);

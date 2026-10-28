@@ -1,17 +1,22 @@
+// @ts-check
+'use strict';
+
 const fs = require('fs');
 
 /**
  * Parses a CSV line respecting quoted values.
  * e.g. '12,"hello, world",34.5' -> ['12', 'hello, world', '34.5']
+ * @param {string} line
+ * @returns {string[]}
  */
 function parseCsvLine(line) {
+    /** @type {string[]} */
     const values = [];
     let current = '';
     let inQuotes = false;
 
     for (let i = 0; i < line.length; i++) {
         const char = line[i];
-
         if (char === '"' || char === "'") {
             inQuotes = !inQuotes;
         } else if (char === ',' && !inQuotes) {
@@ -28,6 +33,8 @@ function parseCsvLine(line) {
 
 /**
  * Casts a string value to appropriate JavaScript type (Number, Boolean, JSON, String).
+ * @param {string} raw
+ * @returns {any}
  */
 function castValue(raw) {
     if (raw === undefined || raw === null || raw === '') return '';
@@ -37,7 +44,7 @@ function castValue(raw) {
     if (lower === 'false') return false;
     if (lower === 'null') return null;
 
-    if (!isNaN(raw) && !isNaN(parseFloat(raw))) {
+    if (!isNaN(/** @type {any} */ (raw)) && !isNaN(parseFloat(raw))) {
         return Number(raw);
     }
 
@@ -53,6 +60,10 @@ function castValue(raw) {
 }
 
 class CsvReplayer {
+    /**
+     * @param {string} filePathOrContent
+     * @param {Record<string, any>} [options={}]
+     */
     constructor(filePathOrContent, options = {}) {
         this.options = {
             loop: true,
@@ -60,7 +71,9 @@ class CsvReplayer {
             ...options
         };
 
+        /** @type {Record<string, any>[]} */
         this.rows = [];
+        /** @type {Map<string, number>} */
         this.cursors = new Map();
 
         let content;
@@ -76,6 +89,9 @@ class CsvReplayer {
         this.parse(content);
     }
 
+    /**
+     * @param {string} content
+     */
     parse(content) {
         const lines = content
             .split(/\r?\n/)
@@ -90,6 +106,7 @@ class CsvReplayer {
 
         for (let i = 1; i < lines.length; i++) {
             const rawValues = parseCsvLine(lines[i]);
+            /** @type {Record<string, any>} */
             const row = {};
 
             headers.forEach((header, index) => {
@@ -100,15 +117,24 @@ class CsvReplayer {
         }
     }
 
+    /** @returns {number} */
     getRowCount() {
         return this.rows.length;
     }
 
+    /**
+     * @param {string} [devId='default']
+     * @returns {boolean}
+     */
     hasMoreRows(devId = 'default') {
         const cursor = this.cursors.get(devId) || 0;
         return cursor < this.rows.length;
     }
 
+    /**
+     * @param {string} [devId='default']
+     * @returns {Record<string, any>|null}
+     */
     getNextRow(devId = 'default') {
         if (this.rows.length === 0) return null;
 
@@ -138,11 +164,18 @@ class CsvReplayer {
         return row;
     }
 
+    /**
+     * @param {string} [devId='default']
+     * @returns {string|null}
+     */
     getNextPayload(devId = 'default') {
         const row = this.getNextRow(devId);
         return row ? JSON.stringify(row) : null;
     }
 
+    /**
+     * @param {string} [devId]
+     */
     reset(devId) {
         if (devId) {
             this.cursors.delete(devId);

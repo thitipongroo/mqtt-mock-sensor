@@ -17,7 +17,7 @@ const { generateEdgeMetadata } = require('./generators/types/edge');
  * @property {number} [anomalyRate] - Probability percentage of anomaly (0-100)
  * @property {string} [anomalyType] - Anomaly type ('critical', 'warning', 'quality', 'out-of-bounds')
  * @property {string} [template] - Custom template string
- * @property {string} [orgId] - Organization / Tenant UUID
+ * @property {string} [orgId] - Optional Organization / Namespace UUID
  * @property {boolean} [epochTimestamp] - Force numeric timestamp
  */
 
@@ -31,16 +31,13 @@ const { generateEdgeMetadata } = require('./generators/types/edge');
  */
 function buildV2Readings(preset, anomalyMode, quality, gps) {
     switch (preset) {
-        case 'sentinel-industrial':
         case 'industrial':
         case 'power':
             return generateIndustrialReadings(anomalyMode, quality);
-        case 'sentinel-air':
         case 'air':
             return generateAirReadings(anomalyMode, quality);
         case 'gps':
             return generateGpsReadings(gps, quality);
-        case 'sentinel-env':
         case 'env':
         default:
             return generateEnvReadings(anomalyMode, quality);
@@ -61,7 +58,6 @@ function populateV1Readings(payload, preset, anomalyMode, gps) {
             payload.longitude = parseFloat(gps.longitude.toFixed(6));
             payload.speed = parseFloat(gps.speed.toFixed(2));
             break;
-        case 'sentinel-industrial':
         case 'industrial':
         case 'power': {
             const isCrit = anomalyMode === 'critical';
@@ -70,7 +66,13 @@ function populateV1Readings(payload, preset, anomalyMode, gps) {
             payload.power = parseFloat((payload.voltage * payload.current).toFixed(2));
             break;
         }
-        case 'sentinel-env':
+        case 'air': {
+            const isCrit = anomalyMode === 'critical';
+            payload.pm25 = isCrit ? 180.0 : randomInRange(10.0, 25.0);
+            payload.pm10 = isCrit ? 260.0 : randomInRange(20.0, 40.0);
+            payload.co2 = isCrit ? 2800.0 : randomInRange(420.0, 580.0);
+            break;
+        }
         case 'env':
         default: {
             if (anomalyMode === 'critical') {

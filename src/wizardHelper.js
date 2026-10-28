@@ -29,12 +29,12 @@ function ask(rl, questionText) {
 function parseSensorChoice(input) {
     const val = input.toLowerCase();
     if (val === '2' || val === 'industrial' || val === 'factory') {
-        return { type: 'power', preset: 'sentinel-industrial' };
+        return { type: 'power', preset: 'industrial' };
     }
     if (val === '3' || val === 'gps' || val === 'vehicle') {
         return { type: 'gps', preset: null };
     }
-    return { type: 'env', preset: 'sentinel-env' };
+    return { type: 'env', preset: 'env' };
 }
 
 /**

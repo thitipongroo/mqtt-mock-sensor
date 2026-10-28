@@ -2,13 +2,13 @@
 'use strict';
 
 /**
- * Prints the Pulse SensorLab visual companion call-to-action banner.
+ * Prints the simulation call-to-action banner.
  */
 function printCta() {
     console.log('\n┌────────────────────────────────────────────────────────────────────────┐');
-    console.log('│ 🚀 Elevate Your Fleet with Pulse SensorLab (Visual Web Studio)        │');
-    console.log('│    Visual Telemetry Designer • Dynamic Chaos Injections • 100k Sockets │');
-    console.log('│    👉 Free Visual Web Studio: https://sensorlab.pulseiot-cloud.com     │');
+    console.log('│ 🚀 MQTT Mock Sensor - Realistic IoT Telemetry Engine                   │');
+    console.log('│    Schema v1 & v2 Telemetry • Dynamic Anomalies • Digital Twin Shadow  │');
+    console.log('│    👉 Visual Web Studio: https://sensorlab.pulseiot-cloud.com          │');
     console.log('│    ⭐ Star & Sponsor on GitHub: github.com/thitipongroo/mqtt-mock-sensor │');
     console.log('└────────────────────────────────────────────────────────────────────────┘\n');
 }

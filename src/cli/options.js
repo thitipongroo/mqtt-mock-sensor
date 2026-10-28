@@ -46,12 +46,9 @@ function buildCliProgram() {
         .option('--schema-version <ver>', 'Telemetry schema version: 1 or 2', (v) =>
             parseInt(v, 10)
         )
-        .option('--org-id <uuid>', 'Organization/Tenant UUID for multi-tenancy')
+        .option('--org-id <uuid>', 'Organization or group UUID (optional)')
         .option('--epoch-timestamp', 'Force numeric Unix epoch milliseconds timestamp', false)
-        .option(
-            '--preset <name>',
-            'Domain preset: industrial, env, air, gps (or sentinel-env, sentinel-industrial, sentinel-air)'
-        )
+        .option('--preset <name>', 'Domain preset: industrial, env, air, gps')
         .option(
             '--anomaly-rate <percent>',
             'Anomaly injection rate in % (e.g. 10)',

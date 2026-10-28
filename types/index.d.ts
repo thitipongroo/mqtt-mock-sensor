@@ -29,7 +29,11 @@ export class SimulationRunner {
 
     waitDelay(ms: number): Promise<void>;
     buildPayload(devId: string): string;
-    runCompensatedLoop(key: string, intervalMs: number, tickFn: () => Promise<void> | void): DriftCompensatedPacer;
+    runCompensatedLoop(
+        key: string,
+        intervalMs: number,
+        tickFn: () => Promise<void> | void
+    ): DriftCompensatedPacer;
     stopLoop(key: string): void;
     checkExitCondition(): void;
     shutdownAndExit(code?: number): void;
@@ -114,8 +118,8 @@ export class CsvReplayer {
 export class ShadowManager {
     constructor(
         client: any,
-        orgId: string,
-        deviceId: string,
+        orgId?: string | null,
+        deviceId?: string,
         initialConfig?: Record<string, any>,
         onConfigChange?: ((delta: Record<string, any>) => void) | null
     );
@@ -158,4 +162,3 @@ export function printCta(): void;
 
 export function main(customOptions?: Record<string, any>): Promise<SimulationRunner | void>;
 export const program: Command;
-

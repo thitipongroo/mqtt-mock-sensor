@@ -64,7 +64,7 @@ async function main(customOptions) {
     let targetTopicTemplate = options.topic;
     if (!targetTopicTemplate) {
         targetTopicTemplate = options.orgId
-            ? `tenants/${options.orgId}/devices/{deviceId}/telemetry`
+            ? `orgs/${options.orgId}/devices/{deviceId}/telemetry`
             : 'sensor/mock/data';
     }
 

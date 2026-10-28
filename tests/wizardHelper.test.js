@@ -9,19 +9,19 @@ const { Writable } = require('stream');
 describe('wizardHelper', () => {
     describe('parseSensorChoice', () => {
         test('defaults to environmental sensor on empty or 1', () => {
-            expect(parseSensorChoice('')).toEqual({ type: 'env', preset: 'sentinel-env' });
-            expect(parseSensorChoice('1')).toEqual({ type: 'env', preset: 'sentinel-env' });
-            expect(parseSensorChoice('env')).toEqual({ type: 'env', preset: 'sentinel-env' });
+            expect(parseSensorChoice('')).toEqual({ type: 'env', preset: 'env' });
+            expect(parseSensorChoice('1')).toEqual({ type: 'env', preset: 'env' });
+            expect(parseSensorChoice('env')).toEqual({ type: 'env', preset: 'env' });
         });
 
         test('parses industrial sensor on 2 or industrial', () => {
             expect(parseSensorChoice('2')).toEqual({
                 type: 'power',
-                preset: 'sentinel-industrial'
+                preset: 'industrial'
             });
             expect(parseSensorChoice('industrial')).toEqual({
                 type: 'power',
-                preset: 'sentinel-industrial'
+                preset: 'industrial'
             });
         });
 
@@ -93,7 +93,7 @@ describe('wizardHelper', () => {
 
             expect(result).toEqual({
                 type: 'env',
-                preset: 'sentinel-env',
+                preset: 'env',
                 broker: 'mqtts://broker.hivemq.com:8883',
                 devices: 5
             });

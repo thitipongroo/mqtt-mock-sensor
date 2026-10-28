@@ -21,7 +21,7 @@ describe('Payload Generator - Complete Test Suite (Phase 1 & Phase 2)', () => {
     });
 
     describe('Schema v2 Core Contract (Phase 1)', () => {
-        test('should output valid Sentinel v2 structure with numeric epoch timestamp and edge metadata', () => {
+        test('should output valid Schema v2 structure with numeric epoch timestamp and edge metadata', () => {
             const raw = generatePayload('env', { schemaVersion: 2, deviceId: 'factory-dev-01' });
             const data = JSON.parse(raw);
 
@@ -60,9 +60,9 @@ describe('Payload Generator - Complete Test Suite (Phase 1 & Phase 2)', () => {
         });
     });
 
-    describe('Sentinel Domain Presets (Phase 2)', () => {
-        test('should generate sentinel-env preset readings correctly', () => {
-            const raw = generatePayload('env', { preset: 'sentinel-env', schemaVersion: 2 });
+    describe('Domain Telemetry Presets', () => {
+        test('should generate env preset readings correctly', () => {
+            const raw = generatePayload('env', { preset: 'env', schemaVersion: 2 });
             const data = JSON.parse(raw);
 
             expect(data.schemaVersion).toBe(2);
@@ -75,9 +75,9 @@ describe('Payload Generator - Complete Test Suite (Phase 1 & Phase 2)', () => {
             expect(data.readings.PRESSURE.quality).toBe('GOOD');
         });
 
-        test('should generate sentinel-industrial preset readings correctly', () => {
+        test('should generate industrial preset readings correctly', () => {
             const raw = generatePayload('power', {
-                preset: 'sentinel-industrial',
+                preset: 'industrial',
                 schemaVersion: 2
             });
             const data = JSON.parse(raw);
@@ -91,8 +91,8 @@ describe('Payload Generator - Complete Test Suite (Phase 1 & Phase 2)', () => {
             expect(data.readings.VIBRATION_G.value).toBeGreaterThan(0);
         });
 
-        test('should generate sentinel-air preset readings correctly', () => {
-            const raw = generatePayload('env', { preset: 'sentinel-air', schemaVersion: 2 });
+        test('should generate air preset readings correctly', () => {
+            const raw = generatePayload('env', { preset: 'air', schemaVersion: 2 });
             const data = JSON.parse(raw);
 
             expect(data.schemaVersion).toBe(2);
@@ -108,7 +108,7 @@ describe('Payload Generator - Complete Test Suite (Phase 1 & Phase 2)', () => {
     describe('Smart Anomaly & Alert Engine (Phase 2)', () => {
         test('should generate CRITICAL anomaly values above thresholds', () => {
             const raw = generatePayload('env', {
-                preset: 'sentinel-env',
+                preset: 'env',
                 schemaVersion: 2,
                 anomalyRate: 100,
                 anomalyType: 'critical'
@@ -121,7 +121,7 @@ describe('Payload Generator - Complete Test Suite (Phase 1 & Phase 2)', () => {
 
         test('should generate WARNING anomaly values in warning range', () => {
             const raw = generatePayload('env', {
-                preset: 'sentinel-env',
+                preset: 'env',
                 schemaVersion: 2,
                 anomalyRate: 100,
                 anomalyType: 'warning'
@@ -135,7 +135,7 @@ describe('Payload Generator - Complete Test Suite (Phase 1 & Phase 2)', () => {
 
         test('should inject UNCERTAIN or BAD data quality when anomalyType is quality', () => {
             const raw = generatePayload('env', {
-                preset: 'sentinel-env',
+                preset: 'env',
                 schemaVersion: 2,
                 anomalyRate: 100,
                 anomalyType: 'quality'
@@ -145,9 +145,9 @@ describe('Payload Generator - Complete Test Suite (Phase 1 & Phase 2)', () => {
             expect(['UNCERTAIN', 'BAD']).toContain(data.readings.TEMPERATURE.quality);
         });
 
-        test('should generate OUT-OF-BOUNDS values to test Sentinel DLQ validation', () => {
+        test('should generate OUT-OF-BOUNDS values for DLQ validation', () => {
             const raw = generatePayload('env', {
-                preset: 'sentinel-env',
+                preset: 'env',
                 schemaVersion: 2,
                 anomalyRate: 100,
                 anomalyType: 'out-of-bounds'

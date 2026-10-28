@@ -38,15 +38,15 @@ describe('ClientManager Test Suite', () => {
 
         test('should replace deviceId and orgId tokens in willTopic and willMessage', () => {
             const will = getWillConfig('sensor-42', {
-                willTopic: 'tenants/{orgId}/devices/{deviceId}/status',
-                orgId: 'tenant-abc',
+                willTopic: 'orgs/{orgId}/devices/{deviceId}/status',
+                orgId: 'org-abc',
                 willMessage: '{"device":"{deviceId}","status":"OFFLINE"}',
                 willQos: 1,
                 willRetain: true
             });
 
             expect(will).not.toBeNull();
-            expect(will.topic).toBe('tenants/tenant-abc/devices/sensor-42/status');
+            expect(will.topic).toBe('orgs/org-abc/devices/sensor-42/status');
             expect(will.payload.toString()).toBe('{"device":"sensor-42","status":"OFFLINE"}');
             expect(will.qos).toBe(1);
             expect(will.retain).toBe(true);

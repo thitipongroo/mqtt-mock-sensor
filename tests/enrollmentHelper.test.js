@@ -24,7 +24,7 @@ describe('enrollmentHelper - Test Suite', () => {
         });
     });
 
-    test('should resolve credentials when Sentinel API returns plain-text password', async () => {
+    test('should resolve credentials when enrollment API returns plain-text password', async () => {
         const enrollPromise = enrollDevice(
             'http://localhost:8080/api/v1/devices/enroll',
             'sensor-01',
@@ -41,7 +41,7 @@ describe('enrollmentHelper - Test Suite', () => {
         });
     });
 
-    test('should resolve credentials when Sentinel API returns JSON response', async () => {
+    test('should resolve credentials when enrollment API returns JSON response', async () => {
         const enrollPromise = enrollDevice(
             'http://localhost:8080/api/v1/devices/enroll',
             'sensor-02',
@@ -58,7 +58,7 @@ describe('enrollmentHelper - Test Suite', () => {
         });
     });
 
-    test('should reject when Sentinel API returns non-200 status code', async () => {
+    test('should reject when enrollment API returns non-200 status code', async () => {
         mockRes.statusCode = 403;
         const enrollPromise = enrollDevice(
             'http://localhost:8080/api/v1/devices/enroll',

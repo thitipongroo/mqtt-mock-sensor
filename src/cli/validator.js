@@ -14,9 +14,6 @@ const VALID_ANOMALY_TYPES = ['critical', 'warning', 'quality', 'out-of-bounds'];
  */
 function resolveSchemaVersion(options) {
     if (options.schemaVersion) return options.schemaVersion;
-    if (options.preset && options.preset.toLowerCase().startsWith('sentinel-')) {
-        return 2;
-    }
     return 1;
 }
 
@@ -62,13 +59,6 @@ function validateCliOptions(options) {
     if (options.orgId && !UUID_REGEX.test(options.orgId)) {
         console.error(
             `❌ Error: Invalid --org-id format "${options.orgId}". Must be a valid UUID.`
-        );
-        process.exit(1);
-    }
-
-    if (options.shadow && !options.orgId) {
-        console.error(
-            '❌ Error: --shadow requires --org-id for topic construction (tenants/{orgId}/devices/{deviceId}/shadow/...)'
         );
         process.exit(1);
     }

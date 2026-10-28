@@ -18,7 +18,7 @@ describe('ShadowManager - Phase 3 Test Suite', () => {
 
         expect(mockClient.subscribe).toHaveBeenCalled();
         expect(mockClient.publish).toHaveBeenCalledWith(
-            `tenants/${orgId}/devices/dev-01/shadow/update`,
+            `orgs/${orgId}/devices/dev-01/shadow/update`,
             expect.stringContaining('"samplingInterval":3000'),
             expect.any(Object),
             expect.any(Function)
@@ -53,8 +53,22 @@ describe('ShadowManager - Phase 3 Test Suite', () => {
 
         // Check Publish Ack response to updateTopic
         expect(mockClient.publish).toHaveBeenCalledWith(
-            `tenants/${orgId}/devices/dev-01/shadow/update`,
+            `orgs/${orgId}/devices/dev-01/shadow/update`,
             expect.stringContaining('"version":5'),
+            expect.any(Object),
+            expect.any(Function)
+        );
+    });
+
+    test('should construct standard device shadow topics when orgId is omitted', () => {
+        const shadow = new ShadowManager(mockClient, null, 'dev-02', { interval: 2000 });
+        shadow.init();
+
+        expect(shadow.updateTopic).toBe('devices/dev-02/shadow/update');
+        expect(shadow.deltaTopic).toBe('devices/dev-02/shadow/update/delta');
+        expect(mockClient.publish).toHaveBeenCalledWith(
+            'devices/dev-02/shadow/update',
+            expect.stringContaining('"samplingInterval":2000'),
             expect.any(Object),
             expect.any(Function)
         );

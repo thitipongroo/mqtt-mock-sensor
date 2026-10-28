@@ -8,7 +8,7 @@
 class ShadowManager {
     /**
      * @param {any} client - MQTT Client instance
-     * @param {string} orgId - Tenant/Organization UUID
+     * @param {string|null} [orgId] - Optional Organization/Namespace identifier
      * @param {string} deviceId - Simulated Device ID
      * @param {Record<string, any>} [initialConfig={}] - Initial device state configuration
      * @param {((delta: Record<string, any>) => void)|null} [onConfigChange=null] - Delta update callback
@@ -19,10 +19,14 @@ class ShadowManager {
         this.deviceId = deviceId;
         this.onConfigChange = onConfigChange;
 
-        this.updateTopic = `tenants/${orgId}/devices/${deviceId}/shadow/update`;
-        this.deltaTopic = `tenants/${orgId}/devices/${deviceId}/shadow/update/delta`;
-        this.acceptedTopic = `tenants/${orgId}/devices/${deviceId}/shadow/update/accepted`;
-        this.rejectedTopic = `tenants/${orgId}/devices/${deviceId}/shadow/update/rejected`;
+        const baseTopic =
+            (initialConfig && initialConfig.baseTopic) ||
+            (orgId ? `orgs/${orgId}/devices/${deviceId}/shadow` : `devices/${deviceId}/shadow`);
+
+        this.updateTopic = `${baseTopic}/update`;
+        this.deltaTopic = `${baseTopic}/update/delta`;
+        this.acceptedTopic = `${baseTopic}/update/accepted`;
+        this.rejectedTopic = `${baseTopic}/update/rejected`;
 
         this.reportedState = {
             samplingInterval: initialConfig.interval || 2000,

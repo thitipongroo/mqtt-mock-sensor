@@ -1,5 +1,63 @@
 const deviceGpsStates = new Map();
 
+const DANGEROUS_KEYS = new Set(['__proto__', 'constructor', 'prototype']);
+
+/**
+ * Checks whether a property key is dangerous (can cause prototype pollution).
+ * @param {*} key
+ * @returns {boolean}
+ */
+function isDangerousKey(key) {
+    if (typeof key !== 'string') return false;
+    const lower = key.trim().toLowerCase();
+    return (
+        DANGEROUS_KEYS.has(lower) ||
+        lower.includes('__proto__') ||
+        lower.includes('prototype') ||
+        lower.includes('constructor')
+    );
+}
+
+/**
+ * Sanitizes an object recursively by stripping prototype-polluting properties
+ * and storing mappings in prototype-less objects (Object.create(null)).
+ * @param {*} input
+ * @returns {*}
+ */
+function sanitizeObject(input) {
+    if (input === null || typeof input !== 'object') {
+        return input;
+    }
+
+    if (Array.isArray(input)) {
+        return input.map((item) => sanitizeObject(item));
+    }
+
+    const clean = Object.create(null);
+    for (const key of Object.keys(input)) {
+        if (isDangerousKey(key)) {
+            continue;
+        }
+        clean[key] = sanitizeObject(input[key]);
+    }
+    return clean;
+}
+
+/**
+ * Safely parses a JSON string while stripping out prototype-polluting properties.
+ * @param {string} jsonString
+ * @returns {Object}
+ */
+function safeJsonParse(jsonString) {
+    const parsed = JSON.parse(jsonString, (key, value) => {
+        if (isDangerousKey(key)) {
+            return undefined;
+        }
+        return value;
+    });
+    return sanitizeObject(parsed);
+}
+
 function getDeviceGps(devId) {
     if (!deviceGpsStates.has(devId)) {
         deviceGpsStates.set(devId, {
@@ -17,7 +75,7 @@ function randomInRange(min, max, decimals = 2) {
 }
 
 // ──────────────────────────────────────────────────────────
-// 1. Domain Readings Generators
+// 1. Domain Readings Generators (Prototype-less Objects)
 // ──────────────────────────────────────────────────────────
 
 function generateEnvReadings(anomalyMode, quality) {
@@ -40,13 +98,17 @@ function generateEnvReadings(anomalyMode, quality) {
         hum = -10.0; // ละเมิด HUM_MIN (0.0)
     }
 
-    return {
-        TEMPERATURE: { value: temp, unit: '°C', quality },
-        HUMIDITY: { value: hum, unit: '%RH', quality },
-        SMOKE_PPM: { value: smoke, unit: 'ppm', quality },
-        CO2_PPM: { value: co2, unit: 'ppm', quality },
-        PRESSURE: { value: pressure, unit: 'hPa', quality }
-    };
+    const readings = Object.create(null);
+    readings.TEMPERATURE = Object.assign(Object.create(null), { value: temp, unit: '°C', quality });
+    readings.HUMIDITY = Object.assign(Object.create(null), { value: hum, unit: '%RH', quality });
+    readings.SMOKE_PPM = Object.assign(Object.create(null), { value: smoke, unit: 'ppm', quality });
+    readings.CO2_PPM = Object.assign(Object.create(null), { value: co2, unit: 'ppm', quality });
+    readings.PRESSURE = Object.assign(Object.create(null), {
+        value: pressure,
+        unit: 'hPa',
+        quality
+    });
+    return readings;
 }
 
 function generateIndustrialReadings(anomalyMode, quality) {
@@ -74,13 +136,17 @@ function generateIndustrialReadings(anomalyMode, quality) {
         temp = 550.0;
     }
 
-    return {
-        VOLTAGE_V: { value: voltage, unit: 'V', quality },
-        CURRENT_A: { value: current, unit: 'A', quality },
-        POWER_W: { value: power, unit: 'W', quality },
-        VIBRATION_G: { value: vibration, unit: 'g', quality },
-        TEMPERATURE: { value: temp, unit: '°C', quality }
-    };
+    const readings = Object.create(null);
+    readings.VOLTAGE_V = Object.assign(Object.create(null), { value: voltage, unit: 'V', quality });
+    readings.CURRENT_A = Object.assign(Object.create(null), { value: current, unit: 'A', quality });
+    readings.POWER_W = Object.assign(Object.create(null), { value: power, unit: 'W', quality });
+    readings.VIBRATION_G = Object.assign(Object.create(null), {
+        value: vibration,
+        unit: 'g',
+        quality
+    });
+    readings.TEMPERATURE = Object.assign(Object.create(null), { value: temp, unit: '°C', quality });
+    return readings;
 }
 
 function generateAirReadings(anomalyMode, quality) {
@@ -103,31 +169,43 @@ function generateAirReadings(anomalyMode, quality) {
         pm25 = 800.0; // เกิน physicalMax (500.0)
     }
 
-    return {
-        PM25: { value: pm25, unit: 'µg/m³', quality },
-        PM10: { value: pm10, unit: 'µg/m³', quality },
-        VOC_INDEX: { value: voc, unit: 'index', quality },
-        CO2_PPM: { value: co2, unit: 'ppm', quality },
-        O3_PPB: { value: o3, unit: 'ppb', quality }
-    };
+    const readings = Object.create(null);
+    readings.PM25 = Object.assign(Object.create(null), { value: pm25, unit: 'µg/m³', quality });
+    readings.PM10 = Object.assign(Object.create(null), { value: pm10, unit: 'µg/m³', quality });
+    readings.VOC_INDEX = Object.assign(Object.create(null), { value: voc, unit: 'index', quality });
+    readings.CO2_PPM = Object.assign(Object.create(null), { value: co2, unit: 'ppm', quality });
+    readings.O3_PPB = Object.assign(Object.create(null), { value: o3, unit: 'ppb', quality });
+    return readings;
 }
 
 function generateGpsReadings(gps, quality) {
-    return {
-        LATITUDE: { value: parseFloat(gps.latitude.toFixed(6)), unit: '°', quality },
-        LONGITUDE: { value: parseFloat(gps.longitude.toFixed(6)), unit: '°', quality },
-        SPEED: { value: parseFloat(gps.speed.toFixed(2)), unit: 'km/h', quality }
-    };
+    const readings = Object.create(null);
+    readings.LATITUDE = Object.assign(Object.create(null), {
+        value: parseFloat(gps.latitude.toFixed(6)),
+        unit: '°',
+        quality
+    });
+    readings.LONGITUDE = Object.assign(Object.create(null), {
+        value: parseFloat(gps.longitude.toFixed(6)),
+        unit: '°',
+        quality
+    });
+    readings.SPEED = Object.assign(Object.create(null), {
+        value: parseFloat(gps.speed.toFixed(2)),
+        unit: 'km/h',
+        quality
+    });
+    return readings;
 }
 
 function generateEdgeMetadata() {
-    return {
-        firmwareVersion: '3.2.0',
-        rssi: -60 - Math.floor(Math.random() * 25),
-        batteryPct: Math.floor(Math.random() * 20 + 80),
-        uptimeSeconds: Math.floor(process.uptime()),
-        protocol: 'MQTT'
-    };
+    const edge = Object.create(null);
+    edge.firmwareVersion = '3.2.0';
+    edge.rssi = -60 - Math.floor(Math.random() * 25);
+    edge.batteryPct = Math.floor(Math.random() * 20 + 80);
+    edge.uptimeSeconds = Math.floor(process.uptime());
+    edge.protocol = 'MQTT';
+    return edge;
 }
 
 // ──────────────────────────────────────────────────────────
@@ -151,14 +229,21 @@ function generatePayload(type = 'env', options = {}) {
         }
     }
 
-    // รองรับ Custom Template
+    // รองรับ Custom Template ปลอดภัยจาก Prototype Pollution
     if (options.template) {
-        return options.template
+        const rendered = options.template
             .replace(/\{\{timestamp\}\}/g, () => new Date().toISOString())
             .replace(/\{\{epochMs\}\}/g, () => Date.now())
             .replace(/\{\{deviceId\}\}/g, () => devId)
             .replace(/\{\{randomInt\}\}/g, () => Math.floor(Math.random() * 100))
             .replace(/\{\{randomFloat\}\}/g, () => parseFloat((Math.random() * 100).toFixed(2)));
+
+        try {
+            const parsed = safeJsonParse(rendered);
+            return JSON.stringify(parsed);
+        } catch {
+            return rendered;
+        }
     }
 
     const gps = getDeviceGps(devId);
@@ -172,7 +257,7 @@ function generatePayload(type = 'env', options = {}) {
         schemaVersion >= 2 || options.epochTimestamp ? Date.now() : new Date().toISOString();
 
     // ──────────────────────────────────────────────
-    // 2.1 Schema v2 Generation
+    // 2.1 Schema v2 Generation (Prototype-less)
     // ──────────────────────────────────────────────
     if (schemaVersion >= 2) {
         let readings;
@@ -196,13 +281,12 @@ function generatePayload(type = 'env', options = {}) {
                 break;
         }
 
-        const payloadV2 = {
-            deviceId: devId,
-            schemaVersion: 2,
-            timestamp: timestamp,
-            readings: readings,
-            edge: generateEdgeMetadata()
-        };
+        const payloadV2 = Object.create(null);
+        payloadV2.deviceId = devId;
+        payloadV2.schemaVersion = 2;
+        payloadV2.timestamp = timestamp;
+        payloadV2.readings = readings;
+        payloadV2.edge = generateEdgeMetadata();
 
         if (options.orgId) {
             payloadV2.organizationId = options.orgId;
@@ -214,10 +298,9 @@ function generatePayload(type = 'env', options = {}) {
     // ──────────────────────────────────────────────
     // 2.2 Schema v1 Generation (Backward Compatibility)
     // ──────────────────────────────────────────────
-    const payloadV1 = {
-        deviceId: devId,
-        timestamp: timestamp
-    };
+    const payloadV1 = Object.create(null);
+    payloadV1.deviceId = devId;
+    payloadV1.timestamp = timestamp;
 
     if (options.orgId) {
         payloadV1.organizationId = options.orgId;
@@ -260,4 +343,9 @@ function generatePayload(type = 'env', options = {}) {
     return JSON.stringify(payloadV1);
 }
 
-module.exports = { generatePayload };
+module.exports = {
+    generatePayload,
+    sanitizeObject,
+    isDangerousKey,
+    safeJsonParse
+};

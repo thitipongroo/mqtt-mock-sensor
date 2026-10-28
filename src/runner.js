@@ -1,5 +1,6 @@
 const { generatePayload } = require('./payloadGenerator');
 const { ShadowManager } = require('./shadowManager');
+const { validateBrokerUrl } = require('./clientManager');
 
 function printCta() {
     console.log('\n┌────────────────────────────────────────────────────────────────────────┐');
@@ -12,7 +13,7 @@ function printCta() {
 
 class SimulationRunner {
     constructor({
-        options,
+        options = {},
         deviceList,
         targetTopicTemplate,
         effectiveSchemaVersion,
@@ -21,8 +22,12 @@ class SimulationRunner {
         clientManager,
         onExit = null
     }) {
+        if (options && options.broker) {
+            validateBrokerUrl(options.broker, options.allowLocal);
+        }
+
         this.options = options;
-        this.deviceList = deviceList;
+        this.deviceList = deviceList || [];
         this.targetTopicTemplate = targetTopicTemplate;
         this.effectiveSchemaVersion = effectiveSchemaVersion;
         this.customTemplate = customTemplate;
@@ -31,9 +36,24 @@ class SimulationRunner {
         this.onExit = onExit;
 
         this.activeIntervals = new Map();
+        this.activeTimeouts = new Set();
         this.publishedCounts = new Map();
         this.deviceList.forEach((d) => this.publishedCounts.set(d, 0));
         this.isShuttingDown = false;
+
+        this.sigintListener = null;
+        this.sigtermListener = null;
+    }
+
+    waitDelay(ms) {
+        if (ms <= 0) return Promise.resolve();
+        return new Promise((resolve) => {
+            const timeoutId = setTimeout(() => {
+                this.activeTimeouts.delete(timeoutId);
+                resolve();
+            }, ms);
+            this.activeTimeouts.add(timeoutId);
+        });
     }
 
     buildPayload(devId) {
@@ -85,16 +105,46 @@ class SimulationRunner {
         if (this.isShuttingDown) return;
         this.isShuttingDown = true;
 
+        // Clean up process signal listeners
+        if (this.sigintListener) {
+            process.removeListener('SIGINT', this.sigintListener);
+            this.sigintListener = null;
+        }
+        if (this.sigtermListener) {
+            process.removeListener('SIGTERM', this.sigtermListener);
+            this.sigtermListener = null;
+        }
+
+        // Clear all active interval timers
         this.activeIntervals.forEach((id) => clearInterval(id));
         this.activeIntervals.clear();
 
-        this.clientManager.disconnectAll(() => {
-            console.log('🔌 Disconnected all MQTT clients. Goodbye!');
+        // Clear all active timeout timers
+        this.activeTimeouts.forEach((id) => clearTimeout(id));
+        this.activeTimeouts.clear();
+
+        if (this.clientManager && typeof this.clientManager.disconnectAll === 'function') {
+            this.clientManager.disconnectAll(() => {
+                console.log('🔌 Disconnected all MQTT clients. Goodbye!');
+                if (this.onExit) {
+                    this.onExit(code);
+                } else {
+                    process.exit(code);
+                }
+            });
+        } else {
             if (this.onExit) {
                 this.onExit(code);
             } else {
                 process.exit(code);
             }
+        }
+    }
+
+    stop() {
+        return new Promise((resolve) => {
+            this.onExit = resolve;
+            this.shutdownAndExit(0);
         });
     }
 
@@ -126,12 +176,18 @@ class SimulationRunner {
         if (options.chaosDisconnect)
             console.log(`⚡ Chaos: Random ungraceful disconnect (${options.chaosDisconnect}%)`);
 
-        process.on('SIGINT', () => {
-            console.log('\n🛑 Gracefully shutting down...');
+        const handleSignal = (sig) => {
+            console.log(`\n🛑 Received ${sig}. Gracefully shutting down...`);
             printCta();
             console.log();
             this.shutdownAndExit(0);
-        });
+        };
+
+        this.sigintListener = () => handleSignal('SIGINT');
+        this.sigtermListener = () => handleSignal('SIGTERM');
+
+        process.on('SIGINT', this.sigintListener);
+        process.on('SIGTERM', this.sigtermListener);
 
         if (useIndependentSockets) {
             deviceList.forEach((devId) => {
@@ -176,6 +232,8 @@ class SimulationRunner {
             client.on('connect', () => {
                 console.log(`✅ Connected to broker! Simulating ${deviceList.length} device(s)...`);
                 const intervalId = setInterval(async () => {
+                    if (this.isShuttingDown) return;
+
                     if (options.chaosDisconnect && Math.random() * 100 < options.chaosDisconnect) {
                         console.warn('💥 [Chaos] Simulating sudden unclean network drop!');
                         if (client.stream) client.stream.destroy();
@@ -183,13 +241,16 @@ class SimulationRunner {
                     }
 
                     for (const devId of deviceList) {
+                        if (this.isShuttingDown) return;
                         const count = this.publishedCounts.get(devId);
                         if (options.count && count >= options.count) continue;
 
                         if (options.chaosJitter > 0) {
                             const delay = Math.floor(Math.random() * options.chaosJitter);
-                            await new Promise((r) => setTimeout(r, delay));
+                            await this.waitDelay(delay);
                         }
+
+                        if (this.isShuttingDown) return;
 
                         const targetTopic = this.targetTopicTemplate
                             .replace(/\{deviceId\}/g, devId)
@@ -224,6 +285,8 @@ class SimulationRunner {
 
     startDeviceLoop(devId, client, intervalMs) {
         const intervalId = setInterval(async () => {
+            if (this.isShuttingDown) return;
+
             const count = this.publishedCounts.get(devId);
             if (this.options.count && count >= this.options.count) {
                 clearInterval(intervalId);
@@ -242,8 +305,10 @@ class SimulationRunner {
 
             if (this.options.chaosJitter > 0) {
                 const delay = Math.floor(Math.random() * this.options.chaosJitter);
-                await new Promise((r) => setTimeout(r, delay));
+                await this.waitDelay(delay);
             }
+
+            if (this.isShuttingDown) return;
 
             const targetTopic = this.targetTopicTemplate
                 .replace(/\{deviceId\}/g, devId)

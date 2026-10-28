@@ -118,7 +118,7 @@ describe('ClientManager Test Suite', () => {
             };
             mqtt.connect.mockReturnValue(mockClient);
 
-            const manager = new ClientManager('mqtt://localhost:1883');
+            const manager = new ClientManager('mqtt://localhost:1883', { allowLocal: true });
             manager.connectClient('dev-1');
             manager.connectClient('dev-2');
 

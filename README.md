@@ -53,6 +53,7 @@ mqtt-mock-sensor --help
 | Option                   | Type    | Default                        | Description                                                         |
 | ------------------------ | ------- | ------------------------------ | ------------------------------------------------------------------- |
 | -b, --broker [url]       | string  | mqtts://broker.hivemq.com:8883 | MQTT Broker URL (Supports mqtt://, mqtts://, ws://, wss://)         |
+| --allow-local            | boolean | false                          | Allow connection to loopback (localhost, 127.0.0.1) or link-local   |
 | -t, --topic [topic]      | string  | sensor/mock/data               | Target topic. Supports {deviceId} placeholder for dynamic routing   |
 | -i, --interval [ms]      | number  | 2000                           | Stream interval between messages in milliseconds                    |
 | --type < type >          | string  | env                            | Sensor telemetry preset: env, gps, power                            |

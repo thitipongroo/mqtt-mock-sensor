@@ -1,6 +1,11 @@
-const { generatePayload } = require('./payloadGenerator');
+const {
+    generatePayload,
+    sanitizeObject,
+    isDangerousKey,
+    safeJsonParse
+} = require('./payloadGenerator');
 const { SimulationRunner, printCta } = require('./runner');
-const { ClientManager } = require('./clientManager');
+const { ClientManager, validateBrokerUrl, isLoopbackOrLinkLocal } = require('./clientManager');
 const { CsvReplayer } = require('./csvReplayer');
 const { ShadowManager } = require('./shadowManager');
 const { enrollDevice } = require('./enrollmentHelper');
@@ -14,5 +19,10 @@ module.exports = {
     ShadowManager,
     enrollDevice,
     runWizard,
-    printCta
+    printCta,
+    validateBrokerUrl,
+    isLoopbackOrLinkLocal,
+    sanitizeObject,
+    isDangerousKey,
+    safeJsonParse
 };

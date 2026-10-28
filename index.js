@@ -7,9 +7,14 @@ const { version, description } = require('./package.json');
 const { enrollDevice } = require('./src/enrollmentHelper');
 const { CsvReplayer } = require('./src/csvReplayer');
 const { runWizard } = require('./src/wizardHelper');
-const { ClientManager } = require('./src/clientManager');
+const { ClientManager, validateBrokerUrl, isLoopbackOrLinkLocal } = require('./src/clientManager');
 const { SimulationRunner, printCta } = require('./src/runner');
-const { generatePayload } = require('./src/payloadGenerator');
+const {
+    generatePayload,
+    sanitizeObject,
+    isDangerousKey,
+    safeJsonParse
+} = require('./src/payloadGenerator');
 const { ShadowManager } = require('./src/shadowManager');
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -19,6 +24,11 @@ program
     .version(version)
     .description(description)
     .option('-b, --broker <url>', 'MQTT broker URL', 'mqtts://broker.hivemq.com:8883')
+    .option(
+        '--allow-local',
+        'Allow connection to loopback or link-local broker addresses (SSRF warning)',
+        false
+    )
     .option('-t, --topic <topic>', 'MQTT topic to publish to (supports {deviceId} and {orgId})')
     .option('-i, --interval <ms>', 'Interval between messages in ms', (v) => parseInt(v, 10), 2000)
     .option('-u, --username <user>', 'MQTT broker username (optional)')
@@ -119,6 +129,21 @@ async function main(customOptions) {
         if (wizardAnswers.preset) options.preset = wizardAnswers.preset;
         options.broker = wizardAnswers.broker;
         options.devices = wizardAnswers.devices;
+        try {
+            const parsed = new URL(options.broker);
+            if (isLoopbackOrLinkLocal(parsed.hostname)) {
+                options.allowLocal = true;
+            }
+        } catch {
+            // URL parse errors will be caught below
+        }
+    }
+
+    try {
+        validateBrokerUrl(options.broker, options.allowLocal);
+    } catch (err) {
+        console.error(`❌ Security Error: ${err.message}`);
+        process.exit(1);
     }
 
     if (![0, 1, 2].includes(options.qos)) {
@@ -253,5 +278,10 @@ module.exports = {
     CsvReplayer,
     ShadowManager,
     enrollDevice,
-    runWizard
+    runWizard,
+    validateBrokerUrl,
+    isLoopbackOrLinkLocal,
+    sanitizeObject,
+    isDangerousKey,
+    safeJsonParse
 };

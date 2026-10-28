@@ -184,6 +184,46 @@ function getWillConfig(devId, options = {}) {
     };
 }
 
+/**
+ * High-Throughput Packet Queue for batching MQTT packet writes.
+ */
+class PacketQueue {
+    constructor(clientManager, batchSize = 100) {
+        this.clientManager = clientManager;
+        this.batchSize = batchSize;
+        this.queue = [];
+        this.flushScheduled = false;
+    }
+
+    enqueue(client, topic, message, options = {}, callback) {
+        this.queue.push({ client, topic, message, options, callback });
+        if (!this.flushScheduled) {
+            this.flushScheduled = true;
+            queueMicrotask(() => this.flush());
+        }
+    }
+
+    flush() {
+        this.flushScheduled = false;
+        if (this.queue.length === 0) return;
+
+        const batch = this.queue.splice(0, this.queue.length);
+        const byClient = new Map();
+        for (const item of batch) {
+            let list = byClient.get(item.client);
+            if (!list) {
+                list = [];
+                byClient.set(item.client, list);
+            }
+            list.push(item);
+        }
+
+        for (const [client, items] of byClient.entries()) {
+            this.clientManager.publishBatch(client, items);
+        }
+    }
+}
+
 class ClientManager {
     constructor(broker, options = {}) {
         validateBrokerUrl(broker, options.allowLocal);
@@ -191,6 +231,7 @@ class ClientManager {
         this.options = options;
         this.tlsOptions = buildTlsOptions(options);
         this.activeClients = [];
+        this.packetQueue = new PacketQueue(this);
     }
 
     createClientOptions(devId, isPool = false) {
@@ -225,7 +266,59 @@ class ClientManager {
         return client;
     }
 
+    /**
+     * Publishes a single message with optional queue batching.
+     */
+    publish(client, topic, message, options = {}, callback) {
+        if (this.options.batching) {
+            this.packetQueue.enqueue(client, topic, message, options, callback);
+        } else {
+            client.publish(topic, message, options, callback);
+        }
+    }
+
+    /**
+     * Batches multiple packet writes continuously through socket with cork/uncork.
+     * @param {Object} client - MQTT client instance
+     * @param {Array<Object>} packets - Array of { topic, message, options, callback }
+     * @param {Function} [callback] - Callback executed when batch is written
+     */
+    publishBatch(client, packets, callback) {
+        if (!packets || packets.length === 0) {
+            if (callback) callback();
+            return;
+        }
+
+        const hasCork = client && client.stream && typeof client.stream.cork === 'function';
+        if (hasCork) {
+            try {
+                client.stream.cork();
+            } catch {
+                // Ignore if stream is not in writable state
+            }
+        }
+
+        for (const pkt of packets) {
+            try {
+                client.publish(pkt.topic, pkt.message, pkt.options || {}, pkt.callback);
+            } catch (err) {
+                if (pkt.callback) pkt.callback(err);
+            }
+        }
+
+        if (hasCork && typeof client.stream.uncork === 'function') {
+            try {
+                client.stream.uncork();
+            } catch {
+                // Ignore if stream is not in writable state
+            }
+        }
+
+        if (callback) callback();
+    }
+
     disconnectAll(callback) {
+        this.packetQueue.flush();
         const clientsToClose = [...this.activeClients];
         let remaining = clientsToClose.length;
         if (remaining === 0) {
@@ -279,6 +372,7 @@ class ClientManager {
 
 module.exports = {
     ClientManager,
+    PacketQueue,
     buildTlsOptions,
     getWillConfig,
     validateBrokerUrl,

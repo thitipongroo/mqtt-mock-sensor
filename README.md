@@ -66,6 +66,7 @@ mqtt-mock-sensor --help
 | -q, --qos [0,1,2]        | number  | 0                              | MQTT Quality of Service level                                       |
 | -r, --retain             | boolean | false                          | Enable MQTT retain message flag                                     |
 | --count [n]              | number  | Unlimited                      | Automatically stop and exit after publishing N messages per device  |
+| --duration [sec]         | number  | Unlimited                      | Stop and exit simulation after specified seconds                    |
 | --anomaly-rate [pct]     | number  | 0                              | Percentage of messages to inject extreme metric anomalies (0-100)   |
 | --anomaly-type [type]    | string  | critical                       | Anomaly type: critical, warning, quality, or out-of-bounds.         |
 | --independent-clients    | boolean | false                          | Spawn separate TCP/TLS client sockets per device (true concurrency) |

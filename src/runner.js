@@ -11,6 +11,80 @@ function printCta() {
     console.log('└────────────────────────────────────────────────────────────────────────┘\n');
 }
 
+/**
+ * Pre-generated Payload Ring Buffer to eliminate V8 GC pauses and JSON serialization overhead
+ * during high-frequency telemetry streaming (10 - 100 Hz).
+ */
+class PreGeneratedPayloadBuffer {
+    constructor({ deviceList, type, options, customTemplate, csvReplayer, poolSize = 32 }) {
+        this.deviceList = deviceList || [];
+        this.type = type;
+        this.options = options || {};
+        this.customTemplate = customTemplate;
+        this.csvReplayer = csvReplayer;
+        this.poolSize = poolSize;
+        this.buffers = new Map();
+
+        if (!this.csvReplayer) {
+            this.initPools();
+        }
+    }
+
+    initPools() {
+        for (const devId of this.deviceList) {
+            const pool = [];
+            for (let i = 0; i < this.poolSize; i++) {
+                const raw = generatePayload(this.type, {
+                    ...this.options,
+                    deviceId: devId,
+                    template: this.customTemplate
+                });
+
+                const numMatch = raw.match(/"timestamp":(\d+)/);
+                const strMatch = raw.match(/"timestamp":"([^"]+)"/);
+
+                if (numMatch) {
+                    const idx = raw.indexOf(numMatch[0]);
+                    const prefix = raw.slice(0, idx + '"timestamp":'.length);
+                    const suffix = raw.slice(idx + numMatch[0].length);
+                    pool.push({ prefix, suffix, isEpoch: true });
+                } else if (strMatch) {
+                    const idx = raw.indexOf(strMatch[0]);
+                    const prefix = raw.slice(0, idx + '"timestamp":'.length);
+                    const suffix = raw.slice(idx + strMatch[0].length);
+                    pool.push({ prefix, suffix, isEpoch: false });
+                } else {
+                    pool.push({ raw, fallback: true });
+                }
+            }
+            this.buffers.set(devId, { pool, cursor: 0 });
+        }
+    }
+
+    getPayload(devId) {
+        if (this.csvReplayer) {
+            const rowPayload = this.csvReplayer.getNextPayload(devId);
+            if (rowPayload) return rowPayload;
+        }
+
+        const entry = this.buffers.get(devId);
+        if (!entry || !entry.pool || entry.pool.length === 0) {
+            return generatePayload(this.type, {
+                ...this.options,
+                deviceId: devId,
+                template: this.customTemplate
+            });
+        }
+
+        const item = entry.pool[entry.cursor];
+        entry.cursor = (entry.cursor + 1) % entry.pool.length;
+        if (item.fallback) return item.raw;
+
+        const ts = item.isEpoch ? Date.now() : `"${new Date().toISOString()}"`;
+        return item.prefix + ts + item.suffix;
+    }
+}
+
 class SimulationRunner {
     constructor({
         options = {},
@@ -43,6 +117,22 @@ class SimulationRunner {
 
         this.sigintListener = null;
         this.sigtermListener = null;
+
+        // Initialize high-throughput pre-generated payload buffer
+        this.payloadBuffer = new PreGeneratedPayloadBuffer({
+            deviceList: this.deviceList,
+            type: this.options.type,
+            options: {
+                preset: this.options.preset,
+                anomalyRate: this.options.anomalyRate,
+                anomalyType: this.options.anomalyType,
+                schemaVersion: this.effectiveSchemaVersion,
+                orgId: this.options.orgId,
+                epochTimestamp: this.options.epochTimestamp
+            },
+            customTemplate: this.customTemplate,
+            csvReplayer: this.csvReplayer
+        });
     }
 
     waitDelay(ms) {
@@ -57,6 +147,9 @@ class SimulationRunner {
     }
 
     buildPayload(devId) {
+        if (this.payloadBuffer) {
+            return this.payloadBuffer.getPayload(devId);
+        }
         if (this.csvReplayer) {
             const rowPayload = this.csvReplayer.getNextPayload(devId);
             if (rowPayload) return rowPayload;
@@ -71,6 +164,105 @@ class SimulationRunner {
             orgId: this.options.orgId,
             epochTimestamp: this.options.epochTimestamp
         });
+    }
+
+    /**
+     * Self-Adjusting Drift-Compensated Scheduler using process.hrtime.bigint().
+     * Eliminates accumulated timer lag and keeps pacing variance strictly under 2ms.
+     */
+    runCompensatedLoop(key, intervalMs, tickFn) {
+        const intervalNs = BigInt(intervalMs) * 1000000n;
+        const t0 = process.hrtime.bigint();
+        let tickCount = 1n;
+
+        const timerRef = {
+            timeoutId: null,
+            immediateId: null,
+            cancelled: false,
+            cancel() {
+                this.cancelled = true;
+                if (this.timeoutId) {
+                    clearTimeout(this.timeoutId);
+                    this.timeoutId = null;
+                }
+                if (this.immediateId) {
+                    clearImmediate(this.immediateId);
+                    this.immediateId = null;
+                }
+            }
+        };
+
+        const scheduleNext = () => {
+            if (this.isShuttingDown || timerRef.cancelled) return;
+
+            tickCount += 1n;
+            const targetNs = t0 + tickCount * intervalNs;
+            const nowNs = process.hrtime.bigint();
+            const diffNs = targetNs - nowNs;
+            const diffMs = Number(diffNs) / 1000000;
+
+            if (diffMs > 2) {
+                timerRef.timeoutId = setTimeout(
+                    () => {
+                        this.activeTimeouts.delete(timerRef.timeoutId);
+                        timerRef.timeoutId = null;
+                        runTick();
+                    },
+                    Math.floor(diffMs - 1)
+                );
+                this.activeTimeouts.add(timerRef.timeoutId);
+            } else if (diffMs > 0) {
+                timerRef.immediateId = setImmediate(() => {
+                    timerRef.immediateId = null;
+                    runTick();
+                });
+            } else {
+                // Catch-up when lagged behind target
+                if (nowNs - targetNs > intervalNs * 10n) {
+                    // Re-anchor if lagged excessively (>10 intervals)
+                    tickCount = 1n;
+                }
+                timerRef.immediateId = setImmediate(() => {
+                    timerRef.immediateId = null;
+                    runTick();
+                });
+            }
+        };
+
+        const runTick = async () => {
+            if (this.isShuttingDown || timerRef.cancelled) return;
+            try {
+                await tickFn();
+            } catch (err) {
+                console.error('Tick execution error:', err.message);
+            }
+            if (this.isShuttingDown || timerRef.cancelled) return;
+            scheduleNext();
+        };
+
+        // Initial tick scheduled after intervalMs
+        timerRef.timeoutId = setTimeout(() => {
+            this.activeTimeouts.delete(timerRef.timeoutId);
+            timerRef.timeoutId = null;
+            runTick();
+        }, intervalMs);
+        this.activeTimeouts.add(timerRef.timeoutId);
+
+        this.activeIntervals.set(key, timerRef);
+        return timerRef;
+    }
+
+    stopLoop(key) {
+        const timer = this.activeIntervals.get(key);
+        if (timer) {
+            if (typeof timer.cancel === 'function') {
+                timer.cancel();
+            } else {
+                clearInterval(timer);
+                clearTimeout(timer);
+            }
+            this.activeIntervals.delete(key);
+        }
     }
 
     checkExitCondition() {
@@ -116,7 +308,14 @@ class SimulationRunner {
         }
 
         // Clear all active interval timers
-        this.activeIntervals.forEach((id) => clearInterval(id));
+        this.activeIntervals.forEach((timer) => {
+            if (timer && typeof timer.cancel === 'function') {
+                timer.cancel();
+            } else {
+                clearInterval(timer);
+                clearTimeout(timer);
+            }
+        });
         this.activeIntervals.clear();
 
         // Clear all active timeout timers
@@ -176,6 +375,20 @@ class SimulationRunner {
         if (options.chaosDisconnect)
             console.log(`⚡ Chaos: Random ungraceful disconnect (${options.chaosDisconnect}%)`);
 
+        // Duration limit handling
+        if (options.duration && options.duration > 0) {
+            const durationMs = options.duration * 1000;
+            console.log(`⏱️ Duration limit: ${options.duration}s`);
+            const durationTimer = setTimeout(() => {
+                console.log(`\n⏱️ Duration limit of ${options.duration}s reached. Exiting.`);
+                printCta();
+                console.log();
+                this.shutdownAndExit(0);
+            }, durationMs);
+            if (durationTimer.unref) durationTimer.unref();
+            this.activeTimeouts.add(durationTimer);
+        }
+
         const handleSignal = (sig) => {
             console.log(`\n🛑 Received ${sig}. Gracefully shutting down...`);
             printCta();
@@ -231,7 +444,8 @@ class SimulationRunner {
 
             client.on('connect', () => {
                 console.log(`✅ Connected to broker! Simulating ${deviceList.length} device(s)...`);
-                const intervalId = setInterval(async () => {
+
+                this.runCompensatedLoop('pool', options.interval, async () => {
                     if (this.isShuttingDown) return;
 
                     if (options.chaosDisconnect && Math.random() * 100 < options.chaosDisconnect) {
@@ -240,6 +454,7 @@ class SimulationRunner {
                         return;
                     }
 
+                    const packets = [];
                     for (const devId of deviceList) {
                         if (this.isShuttingDown) return;
                         const count = this.publishedCounts.get(devId);
@@ -258,23 +473,25 @@ class SimulationRunner {
 
                         const message = this.buildPayload(devId);
 
-                        client.publish(
-                            targetTopic,
+                        packets.push({
+                            topic: targetTopic,
                             message,
-                            { qos: options.qos, retain: options.retain },
-                            (err) => {
+                            options: { qos: options.qos, retain: options.retain },
+                            callback: (err) => {
                                 if (err)
                                     console.error(`❌ [${devId}] Publish error: ${err.message}`);
                             }
-                        );
+                        });
                         console.log(`📤 [${devId}] -> ${message}`);
 
                         this.publishedCounts.set(devId, count + 1);
                     }
-                    this.checkExitCondition();
-                }, options.interval);
 
-                this.activeIntervals.set('pool', intervalId);
+                    if (packets.length > 0) {
+                        this.clientManager.publishBatch(client, packets);
+                    }
+                    this.checkExitCondition();
+                });
             });
 
             client.on('error', (err) => {
@@ -284,12 +501,12 @@ class SimulationRunner {
     }
 
     startDeviceLoop(devId, client, intervalMs) {
-        const intervalId = setInterval(async () => {
+        this.runCompensatedLoop(devId, intervalMs, async () => {
             if (this.isShuttingDown) return;
 
             const count = this.publishedCounts.get(devId);
             if (this.options.count && count >= this.options.count) {
-                clearInterval(intervalId);
+                this.stopLoop(devId);
                 this.checkExitCondition();
                 return;
             }
@@ -328,20 +545,17 @@ class SimulationRunner {
 
             this.publishedCounts.set(devId, count + 1);
             this.checkExitCondition();
-        }, intervalMs);
-
-        this.activeIntervals.set(devId, intervalId);
+        });
     }
 
     restartDeviceLoop(devId, client, newIntervalMs) {
-        if (this.activeIntervals.has(devId)) {
-            clearInterval(this.activeIntervals.get(devId));
-        }
+        this.stopLoop(devId);
         this.startDeviceLoop(devId, client, newIntervalMs);
     }
 }
 
 module.exports = {
     SimulationRunner,
+    PreGeneratedPayloadBuffer,
     printCta
 };

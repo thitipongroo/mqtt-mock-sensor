@@ -7,8 +7,13 @@ const { version, description } = require('./package.json');
 const { enrollDevice } = require('./src/enrollmentHelper');
 const { CsvReplayer } = require('./src/csvReplayer');
 const { runWizard } = require('./src/wizardHelper');
-const { ClientManager, validateBrokerUrl, isLoopbackOrLinkLocal } = require('./src/clientManager');
-const { SimulationRunner, printCta } = require('./src/runner');
+const {
+    ClientManager,
+    PacketQueue,
+    validateBrokerUrl,
+    isLoopbackOrLinkLocal
+} = require('./src/clientManager');
+const { SimulationRunner, PreGeneratedPayloadBuffer, printCta } = require('./src/runner');
 const {
     generatePayload,
     sanitizeObject,
@@ -44,6 +49,7 @@ program
     .option('--key <file>', 'Path to client private key (mTLS)')
     .option('--insecure', 'Allow self-signed certificates', false)
     .option('--count <n>', 'Exit after publishing N messages per device', (v) => parseInt(v, 10))
+    .option('--duration <sec>', 'Exit simulation after specified seconds', (v) => parseInt(v, 10))
     .option('--schema-version <ver>', 'Telemetry schema version: 1 or 2', (v) => parseInt(v, 10))
     .option('--org-id <uuid>', 'Organization/Tenant UUID for multi-tenancy')
     .option('--epoch-timestamp', 'Force numeric Unix epoch milliseconds timestamp', false)
@@ -143,6 +149,11 @@ async function main(customOptions) {
         validateBrokerUrl(options.broker, options.allowLocal);
     } catch (err) {
         console.error(`❌ Security Error: ${err.message}`);
+        process.exit(1);
+    }
+
+    if (options.duration !== undefined && (isNaN(options.duration) || options.duration <= 0)) {
+        console.error('❌ Error: --duration must be a positive integer in seconds');
         process.exit(1);
     }
 
@@ -274,7 +285,9 @@ module.exports = {
     printCta,
     generatePayload,
     SimulationRunner,
+    PreGeneratedPayloadBuffer,
     ClientManager,
+    PacketQueue,
     CsvReplayer,
     ShadowManager,
     enrollDevice,

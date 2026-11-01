@@ -225,6 +225,25 @@ describe('Performance Optimization & Timer Accuracy Test Suite', () => {
             expect(runner.activeIntervals.has('loop-1')).toBe(false);
         });
 
+        test('getMetrics should return valid statistical metrics (meanInterval, variance, drift)', async () => {
+            const { DriftCompensatedPacer } = require('../src/scheduler/pacer');
+            let tickCount = 0;
+            const pacer = new DriftCompensatedPacer(20, async () => {
+                tickCount++;
+            });
+            pacer.start();
+            await new Promise((resolve) => setTimeout(resolve, 110));
+            pacer.cancel();
+
+            const metrics = pacer.getMetrics();
+            expect(tickCount).toBeGreaterThanOrEqual(4);
+            expect(metrics.executedTicks).toBe(tickCount);
+            expect(metrics.meanIntervalMs).toBeGreaterThan(0);
+            expect(typeof metrics.varianceMs).toBe('number');
+            expect(typeof metrics.totalDriftMs).toBe('number');
+            expect(typeof metrics.maxJitterMs).toBe('number');
+        });
+
         test('should enforce duration limit and exit cleanly after specified seconds', (done) => {
             const onExitMock = jest.fn(() => {
                 expect(onExitMock).toHaveBeenCalledWith(0);

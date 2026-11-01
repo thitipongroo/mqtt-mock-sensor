@@ -54,6 +54,13 @@ export class DriftCompensatedPacer {
     accumulatedDriftMs: number;
     start(): void;
     cancel(): void;
+    getMetrics(): {
+        executedTicks: number;
+        meanIntervalMs: number;
+        varianceMs: number;
+        totalDriftMs: number;
+        maxJitterMs: number;
+    };
 }
 
 export interface PayloadBufferConfig {

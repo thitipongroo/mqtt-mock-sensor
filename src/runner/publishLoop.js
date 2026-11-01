@@ -21,6 +21,7 @@ function handleChaosDisconnect(options, client, label = '') {
 
 /**
  * Executes one publishing iteration for pooled multi-device client.
+ * Batches publishes into micro-batches to reduce event loop context switching.
  * @param {any} runner - SimulationRunner instance
  * @param {any} client - Shared MQTT Client
  */
@@ -30,6 +31,8 @@ async function executePoolPublishCycle(runner, client) {
 
     /** @type {Array<any>} */
     const packets = [];
+    const microBatchSize = runner.options.batchSize || 50;
+
     for (const devId of runner.deviceList) {
         if (runner.isShuttingDown) return;
         const count = runner.publishedCounts.get(devId) || 0;
@@ -59,6 +62,12 @@ async function executePoolPublishCycle(runner, client) {
         console.log(`📤 [${devId}] -> ${message}`);
 
         runner.publishedCounts.set(devId, count + 1);
+
+        // When packet buffer reaches microBatchSize, flush immediately to reduce memory & context switching
+        if (packets.length >= microBatchSize) {
+            const batch = packets.splice(0, packets.length);
+            runner.clientManager.publishBatch(client, batch);
+        }
     }
 
     if (packets.length > 0) {
@@ -98,14 +107,26 @@ async function executeDevicePublishCycle(runner, client, devId) {
 
     const message = runner.buildPayload(devId);
 
-    client.publish(
-        targetTopic,
-        message,
-        { qos: runner.options.qos, retain: runner.options.retain },
-        (/** @type {Error|null} */ err) => {
-            if (err) console.error(`❌ [${devId}] Publish error: ${err.message}`);
-        }
-    );
+    if (runner.clientManager && typeof runner.clientManager.publish === 'function') {
+        runner.clientManager.publish(
+            client,
+            targetTopic,
+            message,
+            { qos: runner.options.qos, retain: runner.options.retain },
+            (/** @type {Error|null} */ err) => {
+                if (err) console.error(`❌ [${devId}] Publish error: ${err.message}`);
+            }
+        );
+    } else {
+        client.publish(
+            targetTopic,
+            message,
+            { qos: runner.options.qos, retain: runner.options.retain },
+            (/** @type {Error|null} */ err) => {
+                if (err) console.error(`❌ [${devId}] Publish error: ${err.message}`);
+            }
+        );
+    }
     console.log(`📤 [${devId}] -> ${message}`);
 
     runner.publishedCounts.set(devId, count + 1);

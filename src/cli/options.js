@@ -65,6 +65,17 @@ function buildCliProgram() {
             'Spawn separate MQTT TCP/TLS socket connections per device',
             false
         )
+        .option(
+            '--batching',
+            'Enable micro-batching for packet writes to reduce event loop context switching',
+            false
+        )
+        .option(
+            '--batch-size <n>',
+            'Maximum number of packets per micro-batch',
+            (v) => parseInt(v, 10),
+            50
+        )
         .option('--shadow', 'Enable Bi-directional Device Shadow synchronization', false)
         .option(
             '--enroll-url <url>',

@@ -132,6 +132,45 @@ describe('Performance Optimization & Timer Accuracy Test Suite', () => {
             expect(clientManager.packetQueue.queue.length).toBe(1);
             clientManager.packetQueue.flush();
         });
+
+        test('executePoolPublishCycle should publish packets in micro-batches when simulating many devices', async () => {
+            const { executePoolPublishCycle } = require('../src/runner/publishLoop');
+            const mockClientManager = {
+                publishBatch: jest.fn()
+            };
+            const mockRunner = {
+                isShuttingDown: false,
+                options: { batchSize: 5, qos: 0, retain: false },
+                deviceList: [
+                    'd1',
+                    'd2',
+                    'd3',
+                    'd4',
+                    'd5',
+                    'd6',
+                    'd7',
+                    'd8',
+                    'd9',
+                    'd10',
+                    'd11',
+                    'd12'
+                ],
+                publishedCounts: new Map(),
+                targetTopicTemplate: 'test/{deviceId}',
+                buildPayload: (d) => `{"id":"${d}"}`,
+                clientManager: mockClientManager,
+                checkExitCondition: jest.fn()
+            };
+            const mockClient = {};
+
+            await executePoolPublishCycle(mockRunner, mockClient);
+
+            expect(mockClientManager.publishBatch).toHaveBeenCalledTimes(3);
+            expect(mockClientManager.publishBatch.mock.calls[0][1].length).toBe(5);
+            expect(mockClientManager.publishBatch.mock.calls[1][1].length).toBe(5);
+            expect(mockClientManager.publishBatch.mock.calls[2][1].length).toBe(2);
+            expect(mockRunner.checkExitCondition).toHaveBeenCalledTimes(1);
+        });
     });
 
     describe('3. High-Resolution Drift-Compensated Scheduler (src/runner.js)', () => {

@@ -15,17 +15,7 @@ const {
 const { performGracefulShutdown, registerSignalHandlers } = require('./runner/shutdownHelper');
 const { checkExitCondition } = require('./runner/exitChecker');
 
-/**
- * @typedef {Object} RunnerConfig
- * @property {Record<string, any>} [options]
- * @property {string[]} [deviceList]
- * @property {string} [targetTopicTemplate]
- * @property {number} [effectiveSchemaVersion]
- * @property {string|null} [customTemplate]
- * @property {any} [csvReplayer]
- * @property {any} [clientManager]
- * @property {Function|null} [onExit]
- */
+/** @typedef {import('../types').RunnerConfig} RunnerConfig */
 
 class SimulationRunner {
     /** @param {RunnerConfig} [config={}] */
@@ -77,17 +67,13 @@ class SimulationRunner {
     waitDelay(ms) {
         if (this.isShuttingDown || ms <= 0) return Promise.resolve();
         return new Promise((resolve) => {
-            /** @type {NodeJS.Timeout|null} */
-            let timeoutId = null;
             const cleanup = () => {
-                if (timeoutId) {
-                    clearTimeout(timeoutId);
-                    this.activeTimeouts.delete(timeoutId);
-                }
+                if (timeoutId) clearTimeout(timeoutId);
+                this.activeTimeouts.delete(timeoutId);
                 this.activeWaiters.delete(cleanup);
                 resolve();
             };
-            timeoutId = setTimeout(cleanup, ms);
+            const timeoutId = setTimeout(cleanup, ms);
             this.activeTimeouts.add(timeoutId);
             this.activeWaiters.add(cleanup);
         });
@@ -96,16 +82,16 @@ class SimulationRunner {
     /** @param {string} devId @returns {string} */
     buildPayload(devId) {
         if (this.payloadBuffer) return this.payloadBuffer.getPayload(devId);
-        if (this.csvReplayer) {
-            const row = this.csvReplayer.getNextPayload(devId);
-            if (row) return row;
-        }
-        return generatePayload(this.options.type, {
-            deviceId: devId,
-            template: this.customTemplate,
-            schemaVersion: this.effectiveSchemaVersion,
-            ...this.options
-        });
+        const row = this.csvReplayer && this.csvReplayer.getNextPayload(devId);
+        return (
+            row ||
+            generatePayload(this.options.type, {
+                deviceId: devId,
+                template: this.customTemplate,
+                schemaVersion: this.effectiveSchemaVersion,
+                ...this.options
+            })
+        );
     }
 
     /**
@@ -172,6 +158,7 @@ class SimulationRunner {
     startIndependentFleet() {
         startIndependentFleet(this);
     }
+
     startPooledSimulation() {
         startPooledSimulation(this);
     }

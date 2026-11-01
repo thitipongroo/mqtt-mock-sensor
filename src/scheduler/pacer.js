@@ -139,8 +139,7 @@ class DriftCompensatedPacer {
         const count = this.tickDeltas.length;
         const sum = this.tickDeltas.reduce((a, b) => a + b, 0);
         const mean = sum / count;
-        const variance =
-            this.tickDeltas.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / count;
+        const variance = this.tickDeltas.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / count;
         const totalElapsedMs = Number(this.lastTickNs - this.t0) / 1000000;
         const expectedMs = (this.executedTicks - 1) * this.intervalMs;
         const totalDrift = Math.abs(totalElapsedMs - expectedMs);

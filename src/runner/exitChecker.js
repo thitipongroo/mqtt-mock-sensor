@@ -3,7 +3,7 @@
 
 /**
  * Checks exit conditions for the simulation runner.
- * @param {any} runner
+ * @param {import('../runner').SimulationRunner} runner
  */
 function checkExitCondition(runner) {
     if (runner.csvReplayer && runner.options.replayLoop === false) {

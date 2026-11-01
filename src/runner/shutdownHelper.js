@@ -5,7 +5,7 @@ const { printCta } = require('../ui/banner');
 
 /**
  * Cleans up listeners, cancels all active timers, disconnects clients, and exits.
- * @param {any} runner
+ * @param {import('../runner').SimulationRunner} runner
  * @param {number} [code=0]
  */
 function performGracefulShutdown(runner, code = 0) {
@@ -57,7 +57,7 @@ function performGracefulShutdown(runner, code = 0) {
 
 /**
  * Registers process signal listeners for SIGINT and SIGTERM.
- * @param {any} runner
+ * @param {import('../runner').SimulationRunner} runner
  */
 function registerSignalHandlers(runner) {
     const handleSignal = (/** @type {string} */ sig) => {

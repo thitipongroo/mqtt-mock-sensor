@@ -22,7 +22,7 @@ function handleChaosDisconnect(options, client, label = '') {
 /**
  * Executes one publishing iteration for pooled multi-device client.
  * Batches publishes into micro-batches to reduce event loop context switching.
- * @param {any} runner - SimulationRunner instance
+ * @param {import('../runner').SimulationRunner} runner - SimulationRunner instance
  * @param {any} client - Shared MQTT Client
  */
 async function executePoolPublishCycle(runner, client) {
@@ -78,7 +78,7 @@ async function executePoolPublishCycle(runner, client) {
 
 /**
  * Executes one publishing iteration for an independent device client.
- * @param {any} runner - SimulationRunner instance
+ * @param {import('../runner').SimulationRunner} runner - SimulationRunner instance
  * @param {any} client - Device MQTT Client
  * @param {string} devId - Device identifier
  */

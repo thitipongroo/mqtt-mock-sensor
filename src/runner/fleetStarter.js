@@ -6,7 +6,7 @@ const { executePoolPublishCycle } = require('./publishLoop');
 
 /**
  * Initializes and connects independent client sockets per device.
- * @param {any} runner
+ * @param {import('../runner').SimulationRunner} runner
  */
 function startIndependentFleet(runner) {
     runner.deviceList.forEach((/** @type {string} */ devId) => {
@@ -43,7 +43,7 @@ function startIndependentFleet(runner) {
 
 /**
  * Initializes and connects a shared client socket simulating the device pool.
- * @param {any} runner
+ * @param {import('../runner').SimulationRunner} runner
  */
 function startPooledSimulation(runner) {
     const client = runner.clientManager.connectClient(runner.deviceList[0] || 'mock-device', true);
@@ -60,7 +60,7 @@ function startPooledSimulation(runner) {
 
 /**
  * Sets up a duration timeout if specified in runner options.
- * @param {any} runner
+ * @param {import('../runner').SimulationRunner} runner
  */
 function setupDurationTimer(runner) {
     if (!runner.options.duration || runner.options.duration <= 0) return;

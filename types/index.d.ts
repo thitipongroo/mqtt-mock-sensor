@@ -25,6 +25,7 @@ export class SimulationRunner {
     activeIntervals: Map<string, DriftCompensatedPacer>;
     activeTimeouts: Set<NodeJS.Timeout>;
     publishedCounts: Map<string, number>;
+    activeWaiters: Set<() => void>;
     isShuttingDown: boolean;
 
     waitDelay(ms: number): Promise<void>;

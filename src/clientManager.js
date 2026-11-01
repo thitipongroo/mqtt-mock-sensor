@@ -20,7 +20,7 @@ class ClientManager {
         this.broker = broker;
         this.options = options;
         this.tlsOptions = buildTlsOptions(options);
-        /** @type {any[]} */
+        /** @type {import('mqtt').MqttClient[]} */
         this.activeClients = [];
         this.packetQueue = new PacketQueue(this);
     }
@@ -61,7 +61,7 @@ class ClientManager {
      * Connects an MQTT client and registers it in active clients.
      * @param {string} devId - Device identifier
      * @param {boolean} [isPool=false]
-     * @returns {any}
+     * @returns {import('mqtt').MqttClient}
      */
     connectClient(devId, isPool = false) {
         const connOpts = this.createClientOptions(devId, isPool);

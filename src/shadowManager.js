@@ -1,6 +1,8 @@
 // @ts-check
 'use strict';
 
+const { safeJsonParse } = require('./generators/sanitizer');
+
 /**
  * shadowManager.js
  * Bi-directional Device Shadow synchronization manager
@@ -104,7 +106,7 @@ class ShadowManager {
      */
     handleDelta(rawMessage) {
         try {
-            const data = JSON.parse(rawMessage);
+            const data = safeJsonParse(rawMessage);
             const deltaState = data.state || {};
             const version = data.version;
 

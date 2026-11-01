@@ -42,7 +42,7 @@ function sanitizeObject(input) {
 
     /** @type {Record<string, any>} */
     const clean = Object.create(null);
-    for (const key of Object.keys(input)) {
+    for (const key of Object.getOwnPropertyNames(input)) {
         if (isDangerousKey(key)) {
             continue;
         }

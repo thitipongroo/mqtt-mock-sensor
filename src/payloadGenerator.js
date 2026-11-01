@@ -115,7 +115,12 @@ function generatePayload(type = 'env', options = {}) {
     }
 
     if (options.template) {
-        const rendered = options.template
+        const templateStr =
+            typeof options.template === 'string'
+                ? options.template
+                : JSON.stringify(sanitizeObject(options.template));
+
+        const rendered = templateStr
             .replace(/\{\{timestamp\}\}/g, () => new Date().toISOString())
             .replace(/\{\{epochMs\}\}/g, () => String(Date.now()))
             .replace(/\{\{deviceId\}\}/g, () => devId)
@@ -125,7 +130,10 @@ function generatePayload(type = 'env', options = {}) {
         try {
             return JSON.stringify(safeJsonParse(rendered));
         } catch {
-            return rendered;
+            return rendered
+                .replace(/"?__(?:proto)__"?\s*:/gi, '"_sanitized_proto_":')
+                .replace(/"?constructor"?\s*:/gi, '"_sanitized_constructor_":')
+                .replace(/"?prototype"?\s*:/gi, '"_sanitized_prototype_":');
         }
     }
 

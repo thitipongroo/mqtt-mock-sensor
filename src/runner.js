@@ -54,6 +54,8 @@ class SimulationRunner {
         this.activeIntervals = new Map();
         /** @type {Set<NodeJS.Timeout>} */
         this.activeTimeouts = new Set();
+        /** @type {Set<Function>} */
+        this.activeWaiters = new Set();
         /** @type {Map<string, number>} */
         this.publishedCounts = new Map();
         this.deviceList.forEach((d) => this.publishedCounts.set(d, 0));
@@ -73,13 +75,21 @@ class SimulationRunner {
 
     /** @param {number} ms @returns {Promise<void>} */
     waitDelay(ms) {
-        if (ms <= 0) return Promise.resolve();
+        if (this.isShuttingDown || ms <= 0) return Promise.resolve();
         return new Promise((resolve) => {
-            const timeoutId = setTimeout(() => {
-                this.activeTimeouts.delete(timeoutId);
+            /** @type {NodeJS.Timeout|null} */
+            let timeoutId = null;
+            const cleanup = () => {
+                if (timeoutId) {
+                    clearTimeout(timeoutId);
+                    this.activeTimeouts.delete(timeoutId);
+                }
+                this.activeWaiters.delete(cleanup);
                 resolve();
-            }, ms);
+            };
+            timeoutId = setTimeout(cleanup, ms);
             this.activeTimeouts.add(timeoutId);
+            this.activeWaiters.add(cleanup);
         });
     }
 

@@ -2,6 +2,7 @@
 'use strict';
 
 const fs = require('fs');
+const { safeJsonParse, isDangerousKey } = require('./generators/sanitizer');
 
 /**
  * Parses a CSV line respecting quoted values.
@@ -50,7 +51,7 @@ function castValue(raw) {
 
     if ((raw.startsWith('{') && raw.endsWith('}')) || (raw.startsWith('[') && raw.endsWith(']'))) {
         try {
-            return JSON.parse(raw);
+            return safeJsonParse(raw);
         } catch {
             return raw;
         }
@@ -107,9 +108,10 @@ class CsvReplayer {
         for (let i = 1; i < lines.length; i++) {
             const rawValues = parseCsvLine(lines[i]);
             /** @type {Record<string, any>} */
-            const row = {};
+            const row = Object.create(null);
 
             headers.forEach((header, index) => {
+                if (isDangerousKey(header)) return;
                 row[header] = castValue(rawValues[index]);
             });
 

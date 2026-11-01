@@ -107,19 +107,21 @@ class ClientManager {
             }
         }
 
-        for (const pkt of packets) {
-            try {
-                client.publish(pkt.topic, pkt.message, pkt.options || {}, pkt.callback);
-            } catch (err) {
-                if (pkt.callback) pkt.callback(err);
+        try {
+            for (const pkt of packets) {
+                try {
+                    client.publish(pkt.topic, pkt.message, pkt.options || {}, pkt.callback);
+                } catch (err) {
+                    if (pkt.callback) pkt.callback(err);
+                }
             }
-        }
-
-        if (hasCork && typeof client.stream.uncork === 'function') {
-            try {
-                client.stream.uncork();
-            } catch {
-                // Ignore if socket not writable
+        } finally {
+            if (hasCork && typeof client.stream.uncork === 'function') {
+                try {
+                    client.stream.uncork();
+                } catch {
+                    // Ignore if socket not writable
+                }
             }
         }
 

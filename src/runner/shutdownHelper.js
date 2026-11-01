@@ -32,6 +32,17 @@ function performGracefulShutdown(runner, code = 0) {
     runner.activeTimeouts.forEach((/** @type {NodeJS.Timeout} */ id) => clearTimeout(id));
     runner.activeTimeouts.clear();
 
+    if (runner.activeWaiters) {
+        runner.activeWaiters.forEach((/** @type {Function} */ cleanup) => {
+            try {
+                cleanup();
+            } catch {
+                // Ignore cleanup errors
+            }
+        });
+        runner.activeWaiters.clear();
+    }
+
     if (runner.clientManager && typeof runner.clientManager.disconnectAll === 'function') {
         runner.clientManager.disconnectAll(() => {
             console.log('🔌 Disconnected all MQTT clients. Goodbye!');

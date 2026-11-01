@@ -74,12 +74,35 @@ describe('Security & Boundary Protection Audit Suite', () => {
                 'mqtt://169.254.169.254:1883',
                 'mqtt://169.254.1.1:1883',
                 'mqtt://metadata.google.internal:1883',
-                'mqtt://[fe80::1]:1883'
+                'mqtt://[fe80::1]:1883',
+                'mqtt://[fd00:ec2::254]:1883',
+                'mqtt://instance-data:1883',
+                'mqtt://100.100.100.200:1883'
             ];
 
             metadataUrls.forEach((url) => {
                 expect(() => validateBrokerUrl(url, false)).toThrow(/blocked for SSRF prevention/i);
             });
+        });
+
+        test('should reject SSRF bypasses via trailing dot and hex IPv4-mapped IPv6', () => {
+            const bypassUrls = [
+                'mqtt://localhost.:1883',
+                'mqtt://127.0.0.1.:1883',
+                'mqtt://169.254.169.254.:1883',
+                'mqtt://[::ffff:7f00:1]:1883',
+                'mqtt://[::ffff:a9fe:a9fe]:1883',
+                'mqtt://[::ffff:127.0.0.1]:1883'
+            ];
+
+            bypassUrls.forEach((url) => {
+                expect(() => validateBrokerUrl(url, false)).toThrow(/blocked for SSRF prevention/i);
+            });
+        });
+
+        test('should reject URLs with missing hostname', () => {
+            expect(() => validateBrokerUrl('mqtt://')).toThrow(/Hostname is missing/i);
+            expect(() => validateBrokerUrl('mqtt://:1883')).toThrow(/Invalid broker URL format/i);
         });
 
         test('should allow loopback addresses when allowLocal is true', () => {
@@ -218,6 +241,27 @@ describe('Security & Boundary Protection Audit Suite', () => {
             expect(Object.prototype.admin).toBeUndefined();
         });
 
+        test('generatePayload should sanitize malformed or object templates with prototype-polluting keys', () => {
+            const malformedTemplate =
+                '{"deviceId":"sensor-malformed","__proto__":{"polluted":true},"unclosed":';
+            const sanitizedMalformed = generatePayload('env', { template: malformedTemplate });
+            expect(sanitizedMalformed).not.toContain('"__proto__"');
+            expect(Object.prototype.polluted).toBeUndefined();
+
+            const objectTemplate = {
+                deviceId: '{{deviceId}}',
+                temp: 20.0,
+                __proto__: { polluted: true }
+            };
+            const sanitizedObj = generatePayload('env', {
+                template: objectTemplate,
+                deviceId: 'obj-dev'
+            });
+            const parsed = JSON.parse(sanitizedObj);
+            expect(parsed.deviceId).toBe('obj-dev');
+            expect(Object.prototype.polluted).toBeUndefined();
+        });
+
         test('generatePayload v1 and v2 should generate safe JSON without prototype pollution', () => {
             const v1Payload = generatePayload('env', { schemaVersion: 1, deviceId: 'test-v1' });
             const v2Payload = generatePayload('env', { schemaVersion: 2, deviceId: 'test-v2' });
@@ -324,6 +368,28 @@ describe('Security & Boundary Protection Audit Suite', () => {
             expect(runner.sigintListener).toBeNull();
             expect(runner.sigtermListener).toBeNull();
             expect(runner.onExit).toHaveBeenCalledWith(0);
+        });
+
+        test('SimulationRunner stop() should resolve pending waitDelay promises cleanly', async () => {
+            const runner = new SimulationRunner({
+                options: { broker: 'mqtts://broker.hivemq.com:8883' },
+                deviceList: ['dev-1']
+            });
+
+            let delayResolved = false;
+            const delayPromise = runner.waitDelay(10000).then(() => {
+                delayResolved = true;
+            });
+
+            expect(runner.activeTimeouts.size).toBe(1);
+            expect(runner.activeWaiters.size).toBe(1);
+
+            await runner.stop();
+
+            await delayPromise;
+            expect(delayResolved).toBe(true);
+            expect(runner.activeTimeouts.size).toBe(0);
+            expect(runner.activeWaiters.size).toBe(0);
         });
     });
 });

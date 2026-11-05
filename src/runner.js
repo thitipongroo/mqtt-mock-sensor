@@ -6,7 +6,7 @@ const { validateBrokerUrl } = require('./clientManager');
 const { DriftCompensatedPacer } = require('./scheduler/pacer');
 const { PreGeneratedPayloadBuffer } = require('./scheduler/payloadBuffer');
 const { printCta, printInitBanner } = require('./ui/banner');
-const { executeDevicePublishCycle } = require('./runner/publishLoop');
+const { executeDevicePublishCycle, executePoolPublishCycle } = require('./runner/publishLoop');
 const {
     startIndependentFleet,
     startPooledSimulation,
@@ -14,6 +14,7 @@ const {
 } = require('./runner/fleetStarter');
 const { performGracefulShutdown, registerSignalHandlers } = require('./runner/shutdownHelper');
 const { checkExitCondition } = require('./runner/exitChecker');
+const { ScenarioRunner } = require('./runner/scenarioRunner');
 
 /** @typedef {import('../types').RunnerConfig} RunnerConfig */
 
@@ -27,7 +28,8 @@ class SimulationRunner {
         customTemplate = null,
         csvReplayer = null,
         clientManager,
-        onExit = null
+        onExit = null,
+        scenario = null
     } = {}) {
         if (options && options.broker) validateBrokerUrl(options.broker, options.allowLocal);
 
@@ -39,6 +41,10 @@ class SimulationRunner {
         this.csvReplayer = csvReplayer;
         this.clientManager = clientManager;
         this.onExit = onExit;
+        this.scenario = scenario;
+        /** @type {ScenarioRunner|null} */
+        this.scenarioRunner = null;
+        this.socketsDropped = false;
 
         /** @type {Map<string, DriftCompensatedPacer>} */
         this.activeIntervals = new Map();
@@ -153,6 +159,11 @@ class SimulationRunner {
 
         if (isIndependent) this.startIndependentFleet();
         else this.startPooledSimulation();
+
+        if (this.scenario) {
+            this.scenarioRunner = new ScenarioRunner(this.scenario, this, this.options);
+            this.scenarioRunner.start();
+        }
     }
 
     startIndependentFleet() {
@@ -161,6 +172,101 @@ class SimulationRunner {
 
     startPooledSimulation() {
         startPooledSimulation(this);
+    }
+
+    /**
+     * Dynamically updates the pacing interval and restarts active drift-compensated loops.
+     * @param {number} newIntervalMs
+     */
+    updateInterval(newIntervalMs) {
+        this.options.interval = newIntervalMs;
+        if (this.activeIntervals.has('pool')) {
+            const client = this.clientManager.activeClients[0];
+            if (client) {
+                this.stopLoop('pool');
+                this.runCompensatedLoop('pool', newIntervalMs, () =>
+                    executePoolPublishCycle(this, client)
+                );
+            }
+        }
+        for (let i = 0; i < this.deviceList.length; i++) {
+            const devId = this.deviceList[i];
+            if (this.activeIntervals.has(devId)) {
+                const client =
+                    this.clientManager.activeClients[i] || this.clientManager.activeClients[0];
+                if (client) {
+                    this.restartDeviceLoop(devId, client, newIntervalMs);
+                }
+            }
+        }
+    }
+
+    /**
+     * Dynamically updates anomaly injection parameters and flushes pre-generated payload pools.
+     * @param {number} [rate]
+     * @param {string} [type]
+     */
+    updateAnomaly(rate, type) {
+        if (rate !== undefined && rate !== null) {
+            const percentage = rate <= 1.0 && rate > 0 ? Math.round(rate * 100) : Math.round(rate);
+            this.options.anomalyRate = percentage;
+        }
+        if (type) {
+            this.options.anomalyType = type;
+        }
+        if (this.payloadBuffer) {
+            this.payloadBuffer.options = {
+                ...this.options,
+                schemaVersion: this.effectiveSchemaVersion
+            };
+            if (typeof this.payloadBuffer.initPools === 'function') {
+                this.payloadBuffer.initPools();
+            }
+        }
+    }
+
+    /**
+     * Cuts client broker connections to simulate a network blackout.
+     */
+    dropSockets() {
+        console.warn('⚡ [Scenario] Sockets dropped: network blackout simulated.');
+        this.socketsDropped = true;
+        this.activeIntervals.forEach((pacer) => {
+            if (pacer && typeof pacer.cancel === 'function') pacer.cancel();
+        });
+        this.activeIntervals.clear();
+
+        if (this.clientManager && Array.isArray(this.clientManager.activeClients)) {
+            this.clientManager.activeClients.forEach((client) => {
+                try {
+                    if (client.stream && typeof client.stream.destroy === 'function') {
+                        client.stream.destroy();
+                    } else if (typeof client.end === 'function') {
+                        client.end(true);
+                    }
+                } catch {
+                    // Ignore force drop errors
+                }
+            });
+        }
+    }
+
+    /**
+     * Reconnects client sockets when network blackout ends.
+     */
+    reconnectSockets() {
+        if (!this.socketsDropped) return;
+        console.log('🔄 [Scenario] Network restored! Reconnecting client sockets...');
+        this.socketsDropped = false;
+        if (this.clientManager) {
+            const isIndependent = Boolean(this.options.independentClients || this.options.shadow);
+            this.clientManager.activeClients = [];
+            if (isIndependent) {
+                this.startIndependentFleet();
+            } else {
+                this.startPooledSimulation();
+            }
+        }
     }
 
     /**
@@ -189,5 +295,6 @@ module.exports = {
     SimulationRunner,
     PreGeneratedPayloadBuffer,
     DriftCompensatedPacer,
+    ScenarioRunner,
     printCta
 };

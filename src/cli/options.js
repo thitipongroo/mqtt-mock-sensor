@@ -106,7 +106,13 @@ function buildCliProgram() {
         .option('--will-qos <0|1|2>', 'MQTT LWT QoS level (0, 1, or 2)', (v) => parseInt(v, 10), 0)
         .option('--will-retain', 'Set MQTT LWT retain flag', false)
         .option('--replay <file>', 'Path to CSV file to replay real sensor telemetry')
-        .option('--no-replay-loop', 'Do not loop CSV replay after reaching EOF');
+        .option('--no-replay-loop', 'Do not loop CSV replay after reaching EOF')
+        .option('--scenario <file>', 'Path to scenario JSON file for pre-scheduled drill execution')
+        .option(
+            '--dry-run',
+            'Validate configuration and preview scenario timeline without publishing MQTT packets',
+            false
+        );
 }
 
 module.exports = {

@@ -1,5 +1,21 @@
 import { Command } from 'commander';
 import { MqttClient } from 'mqtt';
+import { EventEmitter } from 'events';
+
+export interface ScenarioPhase {
+    durationSec: number;
+    intervalMs?: number;
+    anomalyRate?: number;
+    anomalyType?: string;
+    status?: string;
+    dropSockets?: boolean;
+}
+
+export interface ScenarioConfig {
+    name: string;
+    version: number;
+    phases: ScenarioPhase[];
+}
 
 export interface RunnerConfig {
     options?: Record<string, any>;
@@ -10,6 +26,7 @@ export interface RunnerConfig {
     csvReplayer?: CsvReplayer | null;
     clientManager?: ClientManager;
     onExit?: ((code: number) => void) | null;
+    scenario?: ScenarioConfig | null;
 }
 
 export class SimulationRunner {
@@ -22,6 +39,9 @@ export class SimulationRunner {
     csvReplayer: CsvReplayer | null;
     clientManager: ClientManager;
     onExit: ((code: number) => void) | null;
+    scenario: ScenarioConfig | null;
+    scenarioRunner: ScenarioRunner | null;
+    socketsDropped: boolean;
     activeIntervals: Map<string, DriftCompensatedPacer>;
     activeTimeouts: Set<NodeJS.Timeout>;
     publishedCounts: Map<string, number>;
@@ -44,7 +64,40 @@ export class SimulationRunner {
     startPooledSimulation(): void;
     startDeviceLoop(devId: string, client: any, intervalMs: number): void;
     restartDeviceLoop(devId: string, client: any, newIntervalMs: number): void;
+    updateInterval(newIntervalMs: number): void;
+    updateAnomaly(rate?: number, type?: string): void;
+    dropSockets(): void;
+    reconnectSockets(): void;
 }
+
+export class ScenarioRunner extends EventEmitter {
+    constructor(scenario: ScenarioConfig, runner?: any, options?: Record<string, any>);
+    scenario: ScenarioConfig;
+    runner: any;
+    options: Record<string, any>;
+    phases: ScenarioPhase[];
+    totalDurationSec: number;
+    currentPhaseIndex: number;
+    phaseElapsedSec: number;
+    totalElapsedSec: number;
+    isRunning: boolean;
+    isFinished: boolean;
+    timelinePacer: DriftCompensatedPacer | null;
+
+    getCurrentPhase(): ScenarioPhase | null;
+    getPhases(): ScenarioPhase[];
+    getTotalDuration(): number;
+    start(): void;
+    applyPhase(index: number): void;
+    tick(): void;
+    finish(): void;
+    stop(): void;
+}
+
+export function renderProgressBar(current: number, total: number, barWidth?: number): string;
+export function renderPhaseIndicator(phase: any, index: number, totalPhases: number): string;
+export function validateScenario(scenario: any): ScenarioConfig;
+export function loadScenarioFile(scenarioPath?: string, options?: { exitOnError?: boolean }): ScenarioConfig | null;
 
 export class DriftCompensatedPacer {
     constructor(intervalMs: number, tickFn: () => Promise<void> | void);

@@ -7,7 +7,12 @@ const {
     isDangerousKey,
     safeJsonParse
 } = require('./payloadGenerator');
-const { SimulationRunner, PreGeneratedPayloadBuffer, printCta } = require('./runner');
+const {
+    SimulationRunner,
+    PreGeneratedPayloadBuffer,
+    ScenarioRunner,
+    printCta
+} = require('./runner');
 const {
     ClientManager,
     PacketQueue,
@@ -19,12 +24,14 @@ const { CsvReplayer } = require('./csvReplayer');
 const { ShadowManager } = require('./shadowManager');
 const { enrollDevice } = require('./enrollmentHelper');
 const { runWizard } = require('./wizardHelper');
+const { validateScenario, loadScenarioFile } = require('./cli/validator');
 
 module.exports = {
     generatePayload,
     SimulationRunner,
     PreGeneratedPayloadBuffer,
     DriftCompensatedPacer,
+    ScenarioRunner,
     ClientManager,
     PacketQueue,
     CsvReplayer,
@@ -36,5 +43,7 @@ module.exports = {
     isLoopbackOrLinkLocal,
     sanitizeObject,
     isDangerousKey,
-    safeJsonParse
+    safeJsonParse,
+    validateScenario,
+    loadScenarioFile
 };

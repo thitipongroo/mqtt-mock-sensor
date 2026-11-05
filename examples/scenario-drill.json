@@ -1,0 +1,10 @@
+{
+  "name": "Factory Anomaly Drill",
+  "version": 1,
+  "phases": [
+    { "durationSec": 10, "intervalMs": 1000, "anomalyRate": 0.0, "status": "NORMAL" },
+    { "durationSec": 15, "intervalMs": 500, "anomalyRate": 0.6, "status": "OVERHEAT_SPIKE" },
+    { "durationSec": 5, "dropSockets": true, "status": "NETWORK_BLACKOUT" }
+  ]
+}
+

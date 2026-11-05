@@ -130,6 +130,8 @@ mqtt-mock-sensor --help
 | `--will-retain`            | boolean | `false`                          | Enable MQTT LWT retain flag                                                                               |
 | `--replay <file>`          | string  | optional                         | Path to CSV file to replay historical sensor telemetry                                                    |
 | `--no-replay-loop`         | boolean | `false`                          | Stop publishing after reaching the end of the CSV dataset                                                 |
+| `--scenario <file>`        | string  | optional                         | Path to scenario JSON file for pre-scheduled drill execution (Pulse SensorLab Export)                     |
+| `--dry-run`                | boolean | `false`                          | Validate configuration and preview scenario timeline without publishing MQTT packets                      |
 
 ---
 
@@ -280,6 +282,18 @@ mock-sensor \
   --replay ./factory_readings.csv \
   --topic "factory/telemetry/{deviceId}" \
   -i 1000
+```
+
+### 12. Pre-Scheduled Scenario JSON Drill Execution & CI Dry-Run
+
+Execute dynamic multi-phase anomaly drills exported from Pulse SensorLab Web Studio:
+
+```bash
+# Execute drill live against MQTT broker
+mock-sensor --scenario ./examples/scenario-drill.json
+
+# Fast offline dry-run preview for local CI/Dev validation
+mock-sensor --scenario ./examples/scenario-drill.json --dry-run
 ```
 
 ---
@@ -560,6 +574,7 @@ run();
 | :----------------------------------- | :------- | :-------------------------------------------------------------------------- |
 | `generatePayload(type, options)`     | Function | Generates serialized Schema v1 or v2 JSON telemetry                         |
 | `SimulationRunner`                   | Class    | Full simulation orchestrator with start/stop lifecycle                      |
+| `ScenarioRunner`                     | Class    | Pre-scheduled scenario drill runner managing timeline phases & anomalies    |
 | `ClientManager`                      | Class    | Manages pooled or independent MQTT clients, mTLS, and packet queues         |
 | `DriftCompensatedPacer`              | Class    | Precision interval runner that automatically cancels event loop clock drift |
 | `PreGeneratedPayloadBuffer`          | Class    | High-performance circular payload buffer for high-throughput load tests     |

@@ -32,6 +32,10 @@ function performGracefulShutdown(runner, code = 0) {
     runner.activeTimeouts.forEach((/** @type {NodeJS.Timeout} */ id) => clearTimeout(id));
     runner.activeTimeouts.clear();
 
+    if (runner.scenarioRunner && typeof runner.scenarioRunner.stop === 'function') {
+        runner.scenarioRunner.stop();
+    }
+
     if (runner.activeWaiters) {
         runner.activeWaiters.forEach((/** @type {Function} */ cleanup) => {
             try {
